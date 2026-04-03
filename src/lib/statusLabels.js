@@ -1,0 +1,26 @@
+const ORDER_STATUS_LABELS = {
+  DRAFT: 'BORRADOR',
+  PENDING_WAITER_APPROVAL: 'PENDIENTE APROBACION',
+  APPROVED: 'APROBADO',
+  SENT_TO_KITCHEN: 'ENVIADO A COCINA',
+  PREPARING: 'PREPARANDO',
+  READY: 'LISTO',
+  DELIVERED: 'ENTREGADO',
+  CLOSED: 'CERRADO',
+  CANCELLED: 'CANCELADO',
+}
+
+const KITCHEN_STATUS_LABELS = {
+  PENDING: 'PENDIENTE',
+  PREPARING: 'PREPARANDO',
+  READY: 'LISTO',
+  DELIVERED: 'ENTREGADO',
+}
+
+export function orderStatusLabel(status) {
+  return ORDER_STATUS_LABELS[status] || status
+}
+
+export function kitchenStatusLabel(status) {
+  return KITCHEN_STATUS_LABELS[status] || status
+}

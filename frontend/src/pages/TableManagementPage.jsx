@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { downloadTableQrBatchPdf } from '../lib/tableQrPdf'
 import { useAuthStore } from '../store/authStore'
 
@@ -63,13 +64,14 @@ export default function TableManagementPage() {
   const [lastGeneratedRows, setLastGeneratedRows] = useState([])
 
   const salonsQuery = useQuery({
-    queryKey: ['salons-admin'],
+    queryKey: scopedQueryKey('salons-admin', user),
     queryFn: () => api.getSalons(),
     enabled: isAdmin,
+    refetchOnMount: 'always',
   })
 
   const tablesQuery = useQuery({
-    queryKey: ['tables-admin', tableFilters],
+    queryKey: scopedQueryKey('tables-admin', user, tableFilters),
     queryFn: () =>
       api.getTablesAdmin({
         salonId: tableFilters.salonId || undefined,
@@ -77,10 +79,11 @@ export default function TableManagementPage() {
         qrStatus: tableFilters.qrStatus || undefined,
       }),
     enabled: isAdmin,
+    refetchOnMount: 'always',
   })
 
   const qrQuery = useQuery({
-    queryKey: ['tables-qr-pending'],
+    queryKey: scopedQueryKey('tables-qr-pending', user),
     queryFn: api.getPendingQrs,
     enabled: isAdmin,
   })

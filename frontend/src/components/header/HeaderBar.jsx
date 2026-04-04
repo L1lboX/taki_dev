@@ -15,6 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
 import { useAppShellTheme } from './AppShellThemeContext'
@@ -44,6 +45,7 @@ function formatRole(role) {
 export default function HeaderBar() {
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const queryClient = useQueryClient()
 
   const { themeMode, toggleTheme } = useAppShellTheme()
   const { muted, toggleMuted, play } = useNotificationSound()
@@ -74,6 +76,7 @@ export default function HeaderBar() {
 
   const handleLogout = () => {
     handleCloseUserMenu()
+    queryClient.clear()
     logout()
   }
 

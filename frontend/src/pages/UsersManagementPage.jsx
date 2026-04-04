@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
 const ROLES = ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'CASHIER', 'COOK', 'WAITER']
@@ -19,7 +20,7 @@ export default function UsersManagementPage() {
   })
 
   const usersQuery = useQuery({
-    queryKey: ['admin-users'],
+    queryKey: scopedQueryKey('admin-users', user),
     queryFn: api.getAdminUsers,
   })
 

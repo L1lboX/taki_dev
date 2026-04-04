@@ -20,6 +20,12 @@ Implementación funcional v1 para restaurante universitario con:
 - Data model: Prisma (`prisma/schema.prisma`) listo para MySQL
 - Runtime: `memory` (demo) o `prisma` (snapshot persistente de estado)
 
+## Estructura real
+
+- Frontend desplegable: `frontend/`
+- Backend API: `api/src/server.js`
+- El frontend en produccion requiere `VITE_API_URL` apuntando al backend publicado
+
 ## Requisitos
 
 - Node.js 20+
@@ -42,8 +48,9 @@ QR_RATE_LIMIT_MAX=40
 ## Arranque
 
 ```bash
+cd frontend
 npm install
-npm run dev:stack
+npm run dev
 ```
 
 Servicios:
@@ -55,9 +62,16 @@ Servicios:
 También puedes correr por separado:
 
 ```bash
+cd frontend
 npm run api:dev
 npm run web:dev
 ```
+
+## Deploy
+
+- Vercel debe construirse desde `frontend/`
+- Define `VITE_API_URL` en Vercel con la URL publica de Render
+- Render debe usar `DATA_BACKEND=prisma`, `DATABASE_URL` valida y `ALLOWED_ORIGINS` con el dominio Vercel y el dominio custom
 
 ## Usuarios demo
 

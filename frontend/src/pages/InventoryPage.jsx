@@ -2,13 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 export default function InventoryPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [stockDraft, setStockDraft] = useState({})
 
   const inventoryQuery = useQuery({
-    queryKey: ['inventory'],
+    queryKey: scopedQueryKey('inventory', user),
     queryFn: api.getInventory,
     refetchInterval: 15000,
   })

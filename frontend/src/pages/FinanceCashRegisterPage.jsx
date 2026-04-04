@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 function formatMoney(value) {
   return `S/ ${Number(value || 0).toFixed(2)}`
@@ -9,17 +11,18 @@ function formatMoney(value) {
 
 export default function FinanceCashRegisterPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [openingAmount, setOpeningAmount] = useState(0)
   const [countedAmount, setCountedAmount] = useState(0)
 
   const currentQuery = useQuery({
-    queryKey: ['cash-register', 'current'],
+    queryKey: scopedQueryKey(['cash-register', 'current'], user),
     queryFn: api.getCashRegisterCurrent,
     refetchInterval: 5000,
   })
 
   const transactionsQuery = useQuery({
-    queryKey: ['cash-register', 'transactions', currentQuery.data?.id || 'none'],
+    queryKey: scopedQueryKey(['cash-register', 'transactions'], user, currentQuery.data?.id || 'none'),
     queryFn: () => api.getCashRegisterTransactions({ cashSessionId: currentQuery.data?.id }),
     enabled: Boolean(currentQuery.data?.id),
     refetchInterval: 5000,

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 const PRODUCT_STATUS = ['AVAILABLE', 'OUT_OF_STOCK', 'OUT_OF_SEASON']
 
@@ -50,6 +52,7 @@ function normalizeInitial(value) {
 
 export default function MenuProductsPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [filters, setFilters] = useState({
     sectionId: '',
     categoryId: '',
@@ -75,17 +78,17 @@ export default function MenuProductsPage() {
   })
 
   const sectionsQuery = useQuery({
-    queryKey: ['menu-sections'],
+    queryKey: scopedQueryKey('menu-sections', user),
     queryFn: () => api.getMenuSections({ active: true }),
   })
 
   const categoriesQuery = useQuery({
-    queryKey: ['menu-categories', 'all'],
+    queryKey: scopedQueryKey('menu-categories', user, 'all'),
     queryFn: () => api.getMenuCategories({}),
   })
 
   const productsQuery = useQuery({
-    queryKey: ['menu-products', filters],
+    queryKey: scopedQueryKey('menu-products', user, filters),
     queryFn: () => api.getMenuProducts({
       sectionId: filters.sectionId || undefined,
       categoryId: filters.categoryId || undefined,

@@ -3,8 +3,10 @@ import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { downloadKitchenTicketPdf } from '../lib/kitchenTicketPdf'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { getSocket } from '../lib/socket'
 import { kitchenStatusLabel } from '../lib/statusLabels'
+import { useAuthStore } from '../store/authStore'
 
 const COLUMNS = ['PENDING', 'PREPARING', 'READY', 'DELIVERED']
 
@@ -24,15 +26,16 @@ function statusClass(status) {
 
 export default function KitchenPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
 
   const ticketsQuery = useQuery({
-    queryKey: ['tickets'],
+    queryKey: scopedQueryKey('tickets', user),
     queryFn: api.listKitchenTickets,
     refetchInterval: 5000,
   })
 
   const incidentsQuery = useQuery({
-    queryKey: ['incidents'],
+    queryKey: scopedQueryKey('incidents', user),
     queryFn: api.listKitchenIncidents,
     refetchInterval: 5000,
   })

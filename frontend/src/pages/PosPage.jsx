@@ -3,8 +3,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { downloadKitchenTicketPdf } from '../lib/kitchenTicketPdf'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { getSocket } from '../lib/socket'
 import { orderStatusLabel } from '../lib/statusLabels'
+import { useAuthStore } from '../store/authStore'
 
 const todayIso = new Date().toISOString().slice(0, 10)
 
@@ -94,6 +96,7 @@ function summarizeLiveOrders(orders) {
 
 export default function PosPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
 
   const [selectedTableId, setSelectedTableId] = useState('')
   const [persons, setPersons] = useState([])
@@ -103,18 +106,20 @@ export default function PosPage() {
   const [isComposeMode, setComposeMode] = useState(false)
 
   const tablesQuery = useQuery({
-    queryKey: ['tables'],
+    queryKey: scopedQueryKey('tables', user),
     queryFn: api.getTables,
+    refetchOnMount: 'always',
   })
 
   const menusQuery = useQuery({
-    queryKey: ['menus', todayIso],
+    queryKey: scopedQueryKey('menus', user, todayIso),
     queryFn: () => api.getMenus(todayIso),
   })
 
   const ordersQuery = useQuery({
-    queryKey: ['orders'],
+    queryKey: scopedQueryKey('orders', user),
     queryFn: () => api.listOrders(),
+    refetchOnMount: 'always',
   })
 
   const tables = useMemo(() => tablesQuery.data ?? [], [tablesQuery.data])

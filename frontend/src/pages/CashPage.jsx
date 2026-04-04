@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { getSocket } from '../lib/socket'
+import { useAuthStore } from '../store/authStore'
 
 function formatMoney(value) {
   return `S/ ${Number(value || 0).toFixed(2)}`
@@ -266,27 +268,31 @@ function buildDeliveredGroups(orders) {
 export default function CashPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [openingAmount, setOpeningAmount] = useState(0)
   const [countedAmount, setCountedAmount] = useState(0)
   const [paymentDrafts, setPaymentDrafts] = useState({})
   const [payingGroupId, setPayingGroupId] = useState('')
 
   const currentQuery = useQuery({
-    queryKey: ['cash'],
+    queryKey: scopedQueryKey('cash', user),
     queryFn: api.getCashCurrent,
     refetchInterval: 5000,
+    refetchOnMount: 'always',
   })
 
   const tablesQuery = useQuery({
-    queryKey: ['tables'],
+    queryKey: scopedQueryKey('tables', user),
     queryFn: api.getTables,
     refetchInterval: 5000,
+    refetchOnMount: 'always',
   })
 
   const deliveredOrdersQuery = useQuery({
-    queryKey: ['orders', 'delivered'],
+    queryKey: scopedQueryKey(['orders', 'delivered'], user),
     queryFn: () => api.listOrders('status=DELIVERED'),
     refetchInterval: 5000,
+    refetchOnMount: 'always',
   })
 
   const openMutation = useMutation({

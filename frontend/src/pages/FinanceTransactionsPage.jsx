@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 const TX_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER']
 
@@ -21,6 +23,7 @@ function accountLabel(account) {
 
 export default function FinanceTransactionsPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [filters, setFilters] = useState({
     from: '',
     to: '',
@@ -39,12 +42,12 @@ export default function FinanceTransactionsPage() {
   })
 
   const accountsQuery = useQuery({
-    queryKey: ['finance-accounts', 'all'],
+    queryKey: scopedQueryKey('finance-accounts', user, 'all'),
     queryFn: () => api.getFinanceAccounts({}),
   })
 
   const transactionsQuery = useQuery({
-    queryKey: ['finance-transactions', filters],
+    queryKey: scopedQueryKey('finance-transactions', user, filters),
     queryFn: () => api.getFinanceTransactions({
       from: filters.from || undefined,
       to: filters.to || undefined,

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 function formatMoney(value) {
   return `S/ ${Number(value || 0).toFixed(2)}`
@@ -9,19 +11,21 @@ function formatMoney(value) {
 
 export default function OrdersBillsPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [status, setStatus] = useState('OPEN')
   const [drafts, setDrafts] = useState({})
 
   const billsQuery = useQuery({
-    queryKey: ['bills', status],
+    queryKey: scopedQueryKey('bills', user, status),
     queryFn: () => api.getBills({ status: status || undefined }),
     refetchInterval: 5000,
   })
 
   const tablesQuery = useQuery({
-    queryKey: ['tables'],
+    queryKey: scopedQueryKey('tables', user),
     queryFn: api.getTables,
     refetchInterval: 10000,
+    refetchOnMount: 'always',
   })
 
   const tableNumberById = useMemo(() => new Map((tablesQuery.data || []).map((table) => [table.id, table.number])), [tablesQuery.data])

@@ -3,6 +3,7 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { buildCategoryOptions, categoryLabel } from '../lib/catalogMeta'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
 function toBooleanFilter(raw) {
@@ -57,13 +58,13 @@ export default function CatalogManagementPage() {
   const deferredSearch = useDeferredValue(filters.search)
 
   const categoriesQuery = useQuery({
-    queryKey: ['catalog-categories'],
+    queryKey: scopedQueryKey('catalog-categories', user),
     queryFn: () => api.getCatalogCategories({ active: true }),
     enabled: isAdmin,
   })
 
   const catalogQuery = useQuery({
-    queryKey: ['catalog-items', filters.active, filters.category],
+    queryKey: scopedQueryKey('catalog-items', user, filters.active, filters.category),
     queryFn: () => api.getCatalogItems({ active: toBooleanFilter(filters.active), category: filters.category || undefined }),
     enabled: isAdmin,
   })

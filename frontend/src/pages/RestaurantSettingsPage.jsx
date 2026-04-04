@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 function createEmptyForm() {
   return {
@@ -19,10 +21,11 @@ function createEmptyForm() {
 
 export default function RestaurantSettingsPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [form, setForm] = useState(createEmptyForm())
 
   const settingsQuery = useQuery({
-    queryKey: ['restaurant-settings'],
+    queryKey: scopedQueryKey('restaurant-settings', user),
     queryFn: api.getRestaurantSettings,
   })
 

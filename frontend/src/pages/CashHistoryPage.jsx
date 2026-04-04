@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
 import { getSocket } from '../lib/socket'
 import { orderStatusLabel } from '../lib/statusLabels'
 import { useAuthStore } from '../store/authStore'
@@ -64,10 +65,11 @@ export default function CashHistoryPage() {
   const [deleteModal, setDeleteModal] = useState({ open: false, order: null })
 
   const tablesQuery = useQuery({
-    queryKey: ['tables'],
+    queryKey: scopedQueryKey('tables', user),
     queryFn: api.getTables,
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   })
 
   useEffect(() => {
@@ -79,7 +81,15 @@ export default function CashHistoryPage() {
   }, [historySearchInput])
 
   const historyQuery = useQuery({
-    queryKey: ['orders', 'history', historyPage, historyPageSize, historyScope, historyDate, historySearch],
+    queryKey: scopedQueryKey(
+      ['orders', 'history'],
+      user,
+      historyPage,
+      historyPageSize,
+      historyScope,
+      historyDate,
+      historySearch,
+    ),
     queryFn: () => api.listOrderHistory({
       page: historyPage,
       pageSize: historyPageSize,
@@ -90,6 +100,7 @@ export default function CashHistoryPage() {
     placeholderData: (previousData) => previousData,
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    refetchOnMount: 'always',
   })
 
   useEffect(() => {

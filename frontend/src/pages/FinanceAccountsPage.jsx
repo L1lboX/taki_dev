@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 const ACCOUNT_TYPES = ['CASH', 'BANK', 'DIGITAL']
 
@@ -16,6 +18,7 @@ function formatMoney(value) {
 
 export default function FinanceAccountsPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [activeFilter, setActiveFilter] = useState('all')
   const [form, setForm] = useState({
     name: '',
@@ -26,7 +29,7 @@ export default function FinanceAccountsPage() {
   })
 
   const accountsQuery = useQuery({
-    queryKey: ['finance-accounts', activeFilter],
+    queryKey: scopedQueryKey('finance-accounts', user, activeFilter),
     queryFn: () => api.getFinanceAccounts({ active: parseBooleanFilter(activeFilter) }),
   })
 

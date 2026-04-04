@@ -1,4 +1,14 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+const API_BASE_URL = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '')
+
+function resolveApiBaseUrl() {
+  if (API_BASE_URL) return API_BASE_URL
+
+  if (!import.meta.env.PROD) {
+    return window.location.origin
+  }
+
+  throw new Error('Configuracion faltante: define VITE_API_URL para conectar el frontend con el backend en produccion.')
+}
 
 function getToken() {
   return localStorage.getItem('taki_token')
@@ -16,7 +26,7 @@ function withQrToken(options = {}, qrToken) {
 }
 
 export async function apiRequest(path, options = {}) {
-  const target = API_BASE_URL || window.location.origin
+  const target = resolveApiBaseUrl()
 
   const headers = {
     'Content-Type': 'application/json',

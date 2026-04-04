@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "npm run dev:stack",
     "web:dev": "vite",
-    "api:dev": "node --env-file=.env api/src/server.js",
+    "api:dev": "node --env-file=../.env ../api/src/server.js",
     "dev:stack": "concurrently \"npm run api:dev\" \"npm run web:dev\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:generate": "prisma generate --schema ../api/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema ../api/prisma/schema.prisma"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

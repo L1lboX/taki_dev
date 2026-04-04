@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 function parseBooleanFilter(raw) {
   if (raw === 'all') return undefined
@@ -10,6 +12,7 @@ function parseBooleanFilter(raw) {
 
 export default function CustomersManagementPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [activeFilter, setActiveFilter] = useState('all')
   const [form, setForm] = useState({
     name: '',
@@ -21,7 +24,7 @@ export default function CustomersManagementPage() {
   })
 
   const customersQuery = useQuery({
-    queryKey: ['customers', activeFilter],
+    queryKey: scopedQueryKey('customers', user, activeFilter),
     queryFn: () => api.getCustomers({ active: parseBooleanFilter(activeFilter) }),
   })
 

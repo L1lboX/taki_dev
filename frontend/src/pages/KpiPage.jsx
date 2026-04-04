@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 const WAITER_PERIODS = ['TODAY', 'WEEK', 'MONTH']
 const PIE_COLORS = ['#5cb85c', '#4e79a7', '#8e6bbd', '#f28e2b', '#59a14f', '#edc949', '#76b7b2', '#e15759', '#b07aa1', '#9c755f']
@@ -24,40 +26,41 @@ function periodLabel(period) {
 }
 
 export default function KpiPage() {
+  const user = useAuthStore((state) => state.user)
   const [waiterPeriod, setWaiterPeriod] = useState('WEEK')
 
   const clientsQuery = useQuery({
-    queryKey: ['kpi-card', 'clients'],
+    queryKey: scopedQueryKey(['kpi-card', 'clients'], user),
     queryFn: () => api.getKpiClientsSummary(),
     refetchInterval: 10000,
   })
 
   const monthlyProfitQuery = useQuery({
-    queryKey: ['kpi-card', 'monthly-profit'],
+    queryKey: scopedQueryKey(['kpi-card', 'monthly-profit'], user),
     queryFn: () => api.getKpiMonthlyProfitSummary(),
     refetchInterval: 10000,
   })
 
   const incomesQuery = useQuery({
-    queryKey: ['kpi-card', 'incomes'],
+    queryKey: scopedQueryKey(['kpi-card', 'incomes'], user),
     queryFn: () => api.getKpiIncomesSummary(),
     refetchInterval: 10000,
   })
 
   const ordersQuery = useQuery({
-    queryKey: ['kpi-card', 'orders'],
+    queryKey: scopedQueryKey(['kpi-card', 'orders'], user),
     queryFn: () => api.getKpiOrdersSummary(),
     refetchInterval: 10000,
   })
 
   const topProductsQuery = useQuery({
-    queryKey: ['kpi-top-products'],
+    queryKey: scopedQueryKey('kpi-top-products', user),
     queryFn: () => api.getKpiTopProducts({ limit: 10 }),
     refetchInterval: 10000,
   })
 
   const waitersQuery = useQuery({
-    queryKey: ['kpi-waiters', waiterPeriod],
+    queryKey: scopedQueryKey('kpi-waiters', user, waiterPeriod),
     queryFn: () => api.getKpiWaitersSummary({ period: waiterPeriod }),
     refetchInterval: 10000,
   })

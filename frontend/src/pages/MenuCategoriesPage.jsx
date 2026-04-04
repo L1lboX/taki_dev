@@ -2,9 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { scopedQueryKey } from '../lib/queryAuth'
+import { useAuthStore } from '../store/authStore'
 
 export default function MenuCategoriesPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const [sectionFilter, setSectionFilter] = useState('')
   const [form, setForm] = useState({
     sectionId: '',
@@ -15,12 +18,12 @@ export default function MenuCategoriesPage() {
   })
 
   const sectionsQuery = useQuery({
-    queryKey: ['menu-sections'],
+    queryKey: scopedQueryKey('menu-sections', user),
     queryFn: () => api.getMenuSections({ active: true }),
   })
 
   const categoriesQuery = useQuery({
-    queryKey: ['menu-categories', sectionFilter],
+    queryKey: scopedQueryKey('menu-categories', user, sectionFilter),
     queryFn: () => api.getMenuCategories({ sectionId: sectionFilter || undefined }),
   })
 

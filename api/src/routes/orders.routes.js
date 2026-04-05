@@ -72,6 +72,20 @@ const updateHistoryOrderSchema = z
     message: 'Debe enviar al menos un campo para actualizar',
   })
 
+function buildQrOrderNotificationPayload(order) {
+  const table = db.getTableById(order.tableId)
+  const salon = table ? db.getSalonById(table.salonId) : null
+
+  return {
+    orderId: order.id,
+    tableId: order.tableId,
+    tableNumber: table?.number ?? null,
+    salonId: salon?.id ?? null,
+    salonName: salon?.name ?? '',
+    status: order.status,
+  }
+}
+
 router.get(
   '/',
   requireAuth,
@@ -180,8 +194,12 @@ router.post(
     }
 
     const payload = qrItemsSchema.parse(req.body)
+    const hadNoItems = (targetOrder.items || []).length === 0
     const order = db.addItemsToOrder(req.params.id, payload.items)
     emitEvent('order.updated', order)
+    if (hadNoItems && (order.items || []).length > 0 && order.status === ORDER_STATUS.PENDING_WAITER_APPROVAL) {
+      emitEvent('qr.new-order', buildQrOrderNotificationPayload(order))
+    }
     return res.json(order)
   }),
 )

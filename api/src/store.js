@@ -327,6 +327,7 @@ function normalizeTables(rawTables = [], salons = []) {
       qrToken: table?.qrToken || null,
       qrGeneratedAt: table?.qrGeneratedAt || null,
       qrPrintedAt: table?.qrPrintedAt || null,
+      qrBlocked: table?.qrBlocked === true,
     }
   })
 }
@@ -911,6 +912,7 @@ export const db = {
 
     const table = state.tables.find((row) => row.qrToken === token && row.active)
     if (!table) return null
+    if (table.qrBlocked) return null
 
     const salon = this.getSalonById(table.salonId)
     if (!salon?.active) return null
@@ -955,6 +957,7 @@ export const db = {
       qrToken: null,
       qrGeneratedAt: null,
       qrPrintedAt: null,
+      qrBlocked: false,
     }
 
     state.tables.push(table)
@@ -997,6 +1000,7 @@ export const db = {
         qrToken: null,
         qrGeneratedAt: null,
         qrPrintedAt: null,
+        qrBlocked: false,
       }
       state.tables.push(table)
       return tablePublicMeta(table)
@@ -1014,6 +1018,7 @@ export const db = {
     const nextNumber = patch.number != null ? Number(patch.number) : table.number
     const nextCapacity = patch.capacity != null ? Number(patch.capacity) : table.capacity
     const nextActive = patch.active != null ? Boolean(patch.active) : table.active
+    const nextQrBlocked = patch.qrBlocked != null ? Boolean(patch.qrBlocked) : Boolean(table.qrBlocked)
 
     const targetSalon = this.getSalonById(nextSalonId)
     if (!targetSalon) throw new Error('Salon no existe')
@@ -1042,6 +1047,7 @@ export const db = {
     table.number = nextNumber
     table.capacity = nextCapacity
     table.active = nextActive
+    table.qrBlocked = nextQrBlocked
 
     if (!nextActive) {
       table.status = TABLE_STATUS.FREE
@@ -1363,12 +1369,12 @@ export const db = {
     if (!table.active) throw new Error('Mesa inactiva')
     const salon = this.getSalonById(table.salonId)
     if (!salon?.active) throw new Error('El salon de la mesa esta inactivo')
-    let activeSession = this.getActiveSessionByTableId(tableId)
-    if (!activeSession && source === ORDER_SOURCE.QR) {
-      this.openTableSession(tableId, 1, createdByUserId || 'qr-client')
-      activeSession = this.getActiveSessionByTableId(tableId)
+    const activeSession = this.getActiveSessionByTableId(tableId)
+    if (!activeSession) {
+      const error = new Error('La mesa no tiene sesion activa')
+      error.status = 409
+      throw error
     }
-    if (!activeSession) throw new Error('La mesa no tiene sesion activa')
 
     const order = {
       id: randomUUID(),

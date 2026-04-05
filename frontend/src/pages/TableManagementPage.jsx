@@ -546,6 +546,7 @@ export default function TableManagementPage() {
                 <th>Aforo</th>
                 <th>Estado</th>
                 <th>Activo</th>
+                <th>Acceso QR</th>
                 <th>QR</th>
                 <th>Acciones</th>
               </tr>
@@ -558,6 +559,7 @@ export default function TableManagementPage() {
                   <td>{table.capacity}</td>
                   <td>{table.status}</td>
                   <td>{table.active ? 'SI' : 'NO'}</td>
+                  <td>{table.qrBlocked ? 'BLOQUEADO' : 'ACTIVO'}</td>
                   <td>{qrStatusLabel(table.qrStatus)}</td>
                   <td>
                     <div className="inline-actions">
@@ -576,13 +578,25 @@ export default function TableManagementPage() {
                       >
                         {table.active ? 'Desactivar' : 'Activar'}
                       </button>
+                      <button
+                        className="btn btn-soft"
+                        onClick={() =>
+                          updateTableMutation.mutate({
+                            tableId: table.id,
+                            body: { qrBlocked: !table.qrBlocked },
+                          })
+                        }
+                        type="button"
+                      >
+                        {table.qrBlocked ? 'Habilitar QR' : 'Bloquear QR'}
+                      </button>
                     </div>
                   </td>
                 </tr>
               ))}
               {!tables.length && (
                 <tr>
-                  <td colSpan={7}>No hay mesas para los filtros seleccionados.</td>
+                  <td colSpan={8}>No hay mesas para los filtros seleccionados.</td>
                 </tr>
               )}
             </tbody>

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { asyncRoute, requireAuth, requireRoles } from '../auth.js'
 import { ROLES } from '../constants.js'
+import { requirePublicQrAccess } from '../qrToken.js'
 import { db } from '../store.js'
 import { emitEvent } from '../realtime.js'
 
@@ -34,15 +35,15 @@ const updateTableSchema = z
     number: z.number().int().positive().optional(),
     capacity: z.number().int().positive().optional(),
     active: z.boolean().optional(),
+    qrBlocked: z.boolean().optional(),
   })
-  .refine((payload) => payload.salonId != null || payload.number != null || payload.capacity != null || payload.active != null, {
+  .refine((payload) => payload.salonId != null || payload.number != null || payload.capacity != null || payload.active != null || payload.qrBlocked != null, {
     message: 'Debe enviar al menos un campo para actualizar',
   })
 
 const markPrintedSchema = z.object({
   tableIds: z.array(z.string().min(1)).optional(),
 })
-const MIN_TABLE_ID_PREFIX_LENGTH = 16
 
 function parseBooleanQuery(value) {
   if (value == null || value === '') return undefined
@@ -54,25 +55,15 @@ function parseBooleanQuery(value) {
   throw error
 }
 
-function resolvePublicTable(rawTableId) {
-  const tableId = String(rawTableId || '').trim()
-  if (!tableId) return null
-
-  const exact = db.getTableById(tableId)
-  if (exact) return exact
-
-  if (tableId.length < MIN_TABLE_ID_PREFIX_LENGTH) return null
-  const matches = db
-    .listTablesAdmin({ active: true })
-    .filter((row) => row.id.startsWith(tableId))
-
-  if (matches.length !== 1) return null
-  return db.getTableById(matches[0].id) || matches[0]
-}
-
 function getQrPublicBaseUrl(req) {
   const fromEnv = String(process.env.QR_PUBLIC_BASE_URL || '').trim()
   if (fromEnv) return fromEnv.replace(/\/$/, '')
+
+  if (process.env.NODE_ENV === 'production') {
+    const error = new Error('Configuracion faltante: define QR_PUBLIC_BASE_URL para generar URLs QR publicas en produccion.')
+    error.status = 500
+    throw error
+  }
 
   const allowedOrigin = String(process.env.ALLOWED_ORIGINS || '')
     .split(',')
@@ -95,10 +86,9 @@ function mapTableWithSession(table) {
 }
 
 function mapTableQrResponse(table, baseUrl) {
-  const tableNumberLabel = encodeURIComponent(String(table.number))
   const token = table.qrToken ? encodeURIComponent(table.qrToken) : ''
   const qrUrl = token
-    ? `${baseUrl}/qr/${encodeURIComponent(table.id)}?token=${token}&tableNumber=${tableNumberLabel}`
+    ? `${baseUrl}/qr/${encodeURIComponent(table.id)}?token=${token}`
     : null
 
   return {
@@ -113,6 +103,19 @@ function mapTableQrResponse(table, baseUrl) {
     qrGeneratedAt: table.qrGeneratedAt,
     qrPrintedAt: table.qrPrintedAt,
     qrUrl,
+  }
+}
+
+function mapPublicQrAccessResponse(table, menu) {
+  return {
+    tableId: table.id,
+    number: table.number,
+    salon: {
+      id: table.salon.id,
+      name: table.salon.name,
+    },
+    sessionOpen: Boolean(table.activeSessionId && db.getTableSessionById(table.activeSessionId)?.closedAt === null),
+    menu,
   }
 }
 
@@ -198,33 +201,15 @@ router.patch(
 
 router.get(
   '/qr/public/:tableId',
+  requirePublicQrAccess,
   asyncRoute(async (req, res) => {
-    const table = resolvePublicTable(req.params.tableId)
-    if (!table) {
-      return res.status(404).json({ error: 'Mesa QR no disponible' })
+    const date = req.query.date?.toString()
+    const menu = {
+      date: date || new Date().toISOString().slice(0, 10),
+      items: db.getCatalogMenus(date),
     }
 
-    if (!table?.active) {
-      return res.status(404).json({ error: 'Mesa QR no disponible' })
-    }
-
-    const salon = db.getSalonById(table.salonId)
-    if (!salon?.active) {
-      return res.status(404).json({ error: 'Mesa QR no disponible' })
-    }
-
-    const tableWithToken = db.ensureTableQrToken(table.id)
-    const baseUrl = getQrPublicBaseUrl(req)
-    const response = mapTableQrResponse(
-      {
-        ...table,
-        ...tableWithToken,
-        salon,
-      },
-      baseUrl,
-    )
-
-    return res.json(response)
+    return res.json(mapPublicQrAccessResponse(req.qrAccess.table, menu))
   }),
 )
 

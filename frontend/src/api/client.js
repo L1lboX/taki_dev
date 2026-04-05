@@ -25,6 +25,12 @@ function withQrToken(options = {}, qrToken) {
   }
 }
 
+function withTokenQuery(path, qrToken) {
+  if (!qrToken) return path
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}token=${encodeURIComponent(qrToken)}`
+}
+
 export async function apiRequest(path, options = {}) {
   const target = resolveApiBaseUrl()
 
@@ -109,7 +115,7 @@ export const api = {
   createTable: (body) => apiRequest('/tables', { method: 'POST', body: JSON.stringify(body) }),
   createTablesBulk: (body) => apiRequest('/tables/bulk', { method: 'POST', body: JSON.stringify(body) }),
   updateTable: (tableId, body) => apiRequest(`/tables/${tableId}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  resolveQrAccess: (tableId) => apiRequest(`/tables/qr/public/${encodeURIComponent(tableId)}`),
+  resolveQrAccess: (tableId, qrToken) => apiRequest(withTokenQuery(`/tables/qr/public/${encodeURIComponent(tableId)}`, qrToken)),
   getPendingQrs: () => apiRequest('/tables/qr/pending'),
   generatePendingQrs: () => apiRequest('/tables/qr/generate-pending', { method: 'POST', body: JSON.stringify({}) }),
   markPrintedQrs: (body = {}) => apiRequest('/tables/qr/mark-printed', { method: 'POST', body: JSON.stringify(body) }),

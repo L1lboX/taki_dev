@@ -1,12 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { CATALOG_CATEGORIES } from '../lib/catalogMeta'
 import { orderStatusLabel } from '../lib/statusLabels'
 
-const todayIso = new Date().toISOString().slice(0, 10)
 const RECOMMENDED_GROUP_IDS = ['MENU', 'PRINCIPALES', 'A_LA_CARTA']
 const PICKER = {
   ENTRY_INCLUDED: 'ENTRY_INCLUDED',
@@ -163,9 +162,8 @@ function renderCategoryIcon(categoryId) {
 
 export default function QrOrderPage() {
   const { tableId = '' } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const qrTokenFromUrl = searchParams.get('token') || searchParams.get('qrToken') || ''
-  const tableNumberFromUrl = searchParams.get('tableNumber') || ''
 
   const [order, setOrder] = useState(null)
   const [selectedGroupId, setSelectedGroupId] = useState('')
@@ -181,12 +179,15 @@ export default function QrOrderPage() {
   const [pickerFocusId, setPickerFocusId] = useState('')
   const [imageFallbackById, setImageFallbackById] = useState({})
 
-  const menuQuery = useQuery({
-    queryKey: ['qr-menus', todayIso],
-    queryFn: () => api.getPublicMenus(todayIso),
+  const qrAccessQuery = useQuery({
+    queryKey: ['qr-access', tableId, qrTokenFromUrl],
+    queryFn: () => api.resolveQrAccess(tableId, qrTokenFromUrl),
+    enabled: Boolean(tableId && qrTokenFromUrl),
+    retry: false,
+    staleTime: 60_000,
   })
 
-  const allProducts = useMemo(() => menuQuery.data?.items || [], [menuQuery.data?.items])
+  const allProducts = useMemo(() => qrAccessQuery.data?.menu?.items || [], [qrAccessQuery.data?.menu?.items])
 
   const mainProducts = useMemo(() => (
     allProducts.filter((item) => item.type !== 'ADDON' && item.type !== 'BEVERAGE')
@@ -228,21 +229,10 @@ export default function QrOrderPage() {
   }, [groupBuckets, selectedGroupId])
 
   const activeGroupConfig = GROUP_CONFIG[activeGroupId] || null
-
-  const qrAccessQuery = useQuery({
-    queryKey: ['qr-access', tableId],
-    queryFn: () => api.resolveQrAccess(tableId),
-    enabled: Boolean(tableId),
-    retry: false,
-    staleTime: 60_000,
-  })
-
-  const resolvedTableId = qrAccessQuery.data?.id || tableId
-  const qrToken = qrTokenFromUrl || qrAccessQuery.data?.qrToken || ''
-  const tableNumber = tableNumberFromUrl || String(qrAccessQuery.data?.number || '')
-  const hasTokenMismatch = Boolean(
-    qrTokenFromUrl && qrAccessQuery.data?.qrToken && qrTokenFromUrl !== qrAccessQuery.data.qrToken,
-  )
+  const resolvedTableId = qrAccessQuery.data?.tableId || tableId
+  const qrToken = qrTokenFromUrl
+  const tableNumber = qrAccessQuery.data?.number != null ? String(qrAccessQuery.data.number) : ''
+  const sessionOpen = Boolean(qrAccessQuery.data?.sessionOpen)
 
   const selectedMain = useMemo(
     () => mainProducts.find((item) => item.id === productId) || null,
@@ -333,24 +323,11 @@ export default function QrOrderPage() {
     return false
   }
 
-  useEffect(() => {
-    if (qrTokenFromUrl) return
-    if (!qrAccessQuery.data?.qrToken) return
-
-    const nextParams = new URLSearchParams(searchParams)
-    nextParams.set('token', qrAccessQuery.data.qrToken)
-    if (!nextParams.get('tableNumber') && qrAccessQuery.data.number != null) {
-      nextParams.set('tableNumber', String(qrAccessQuery.data.number))
-    }
-
-    setSearchParams(nextParams, { replace: true })
-  }, [qrAccessQuery.data?.number, qrAccessQuery.data?.qrToken, qrTokenFromUrl, searchParams, setSearchParams])
-
   const createQrMutation = useMutation({
     mutationFn: () => api.createQrOrder({ tableId: resolvedTableId }, qrToken),
     onSuccess: (result) => {
       setOrder(result)
-      toast.success('Pedido QR creado. Solicita aprobacion del mesero.')
+      toast.success('Pedido QR iniciado. Ahora agrega los platos que deseas enviar.')
     },
     onError: (error) => toast.error(error.message),
   })
@@ -368,7 +345,7 @@ export default function QrOrderPage() {
       setNotes('')
       setActivePicker(null)
       setPickerFocusId('')
-      toast.success('Item agregado. Espera aprobacion del mesero.')
+      toast.success('Pedido enviado, esperando aprobacion del mesero.')
     },
     onError: (error) => toast.error(error.message),
   })
@@ -462,7 +439,8 @@ export default function QrOrderPage() {
 
   const submitItem = () => {
     if (!qrToken) return toast.error('Este codigo QR no incluye token de seguridad valido')
-    if (hasTokenMismatch) return toast.error('Token QR no corresponde a la mesa')
+    if (qrAccessQuery.error) return toast.error(qrAccessQuery.error.message)
+    if (!sessionOpen) return toast.error('La mesa no tiene sesion activa. Pide al mesero que abra la mesa primero.')
     if (!order) return toast.error('Primero crea tu pedido QR')
     if (!productId) return toast.error('Selecciona un plato')
 
@@ -512,7 +490,7 @@ export default function QrOrderPage() {
                   className="btn btn-main qr-start-btn"
                   onClick={() => createQrMutation.mutate()}
                   type="button"
-                  disabled={!qrToken || qrAccessQuery.isPending || hasTokenMismatch || createQrMutation.isPending}
+                  disabled={!qrToken || qrAccessQuery.isPending || qrAccessQuery.isError || !sessionOpen || createQrMutation.isPending || Boolean(order)}
                 >
                   {order ? 'Pedido QR activo' : 'Iniciar pedido QR'}
                 </button>
@@ -569,24 +547,24 @@ export default function QrOrderPage() {
             </div>
           </div>
 
-          {!qrTokenFromUrl && qrAccessQuery.isPending && (
+          {qrTokenFromUrl && qrAccessQuery.isPending && (
             <p className="alert alert-info qr-alert-block">
               Validando codigo QR...
             </p>
           )}
-          {!qrToken && !qrAccessQuery.isPending && (
+          {!qrToken && (
             <p className="alert alert-warn qr-alert-block">
               QR invalido: falta token de seguridad.
             </p>
           )}
-          {hasTokenMismatch && (
-            <p className="alert alert-error qr-alert-block">
-              Token QR no corresponde a la mesa.
-            </p>
-          )}
-          {!qrToken && qrAccessQuery.error && (
+          {!!qrToken && qrAccessQuery.error && (
             <p className="alert alert-error qr-alert-block">
               {qrAccessQuery.error.message}
+            </p>
+          )}
+          {!!qrToken && qrAccessQuery.data && !sessionOpen && (
+            <p className="alert alert-warn qr-alert-block">
+              Esta mesa aun no tiene sesion activa. Pide al mesero que la abra para continuar.
             </p>
           )}
         </section>
@@ -641,8 +619,8 @@ export default function QrOrderPage() {
               <p className="small muted qr-group-hint">{activeGroupConfig.hint}</p>
             )}
 
-            {menuQuery.isLoading && <p className="alert alert-info">Cargando carta...</p>}
-            {menuQuery.error && <p className="alert alert-error">{menuQuery.error.message}</p>}
+            {qrToken && qrAccessQuery.isLoading && <p className="alert alert-info">Cargando carta...</p>}
+            {qrToken && qrAccessQuery.error && <p className="alert alert-error">{qrAccessQuery.error.message}</p>}
 
             <section className="qr-draft-card">
               <div className="section-head qr-panel-head qr-compact-head">
@@ -822,7 +800,7 @@ export default function QrOrderPage() {
 
               <button
                 className="btn btn-good qr-add-btn"
-                disabled={!order || !productId || !qrToken || hasTokenMismatch || addQrItemsMutation.isPending}
+                disabled={!order || !productId || !qrToken || qrAccessQuery.isError || !sessionOpen || addQrItemsMutation.isPending}
                 onClick={submitItem}
                 type="button"
               >

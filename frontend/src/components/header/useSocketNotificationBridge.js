@@ -9,17 +9,29 @@ export function useSocketNotificationBridge(play) {
 
     const socket = getSocket()
 
-    const handleIncomingEvent = () => {
+    const handleIncomingEvent = (payload, eventName) => {
+      if (
+        eventName === 'order.updated' &&
+        payload?.source === 'QR' &&
+        payload?.status === 'PENDING_WAITER_APPROVAL'
+      ) {
+        return
+      }
+
       void play()
     }
 
-    SOUND_EVENT_CHANNELS.forEach((eventName) => {
-      socket.on(eventName, handleIncomingEvent)
+    const listeners = SOUND_EVENT_CHANNELS.map((eventName) => {
+      const listener = (payload) => handleIncomingEvent(payload, eventName)
+      socket.on(eventName, listener)
+      return [eventName, listener]
     })
 
     return () => {
-      SOUND_EVENT_CHANNELS.forEach((eventName) => {
-        socket.off(eventName, handleIncomingEvent)
+      listeners.forEach(([eventName, listener]) => {
+        if (listener) {
+          socket.off(eventName, listener)
+        }
       })
     }
   }, [play])

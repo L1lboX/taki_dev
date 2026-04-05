@@ -3,6 +3,8 @@ import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
+import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded'
+import NotificationsOffRoundedIcon from '@mui/icons-material/NotificationsOffRounded'
 import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded'
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded'
 import WifiTetheringRoundedIcon from '@mui/icons-material/WifiTetheringRounded'
@@ -18,10 +20,13 @@ import {
   Typography,
 } from '@mui/material'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { getSocket } from '../../lib/socket'
 import { useAuthStore } from '../../store/authStore'
 import { useAppShellTheme } from './AppShellThemeContext'
 import { useNotificationSound } from './useNotificationSound'
+import { useQrNotificationSound } from './useQrNotificationSound'
 import { useSocketConnectionStatus } from './useSocketConnectionStatus'
 import { useSocketNotificationBridge } from './useSocketNotificationBridge'
 
@@ -51,6 +56,11 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
 
   const { themeMode, toggleTheme } = useAppShellTheme()
   const { muted, toggleMuted, play } = useNotificationSound()
+  const {
+    muted: qrNotificationMuted,
+    toggleMuted: toggleQrNotificationMuted,
+    play: playQrNotification,
+  } = useQrNotificationSound()
   const connection = useSocketConnectionStatus()
 
   useSocketNotificationBridge(play)
@@ -67,6 +77,34 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
 
   const connectionToneClass = isSocketOnline ? 'connected' : 'disconnected parpadeo'
   const userPopoverOpen = Boolean(anchorEl)
+  const canReceiveQrAlerts = ['WAITER', 'ADMIN', 'SUPER_ADMIN'].includes(String(user?.role || '').toUpperCase())
+
+  useEffect(() => {
+    if (!canReceiveQrAlerts) return undefined
+
+    const socket = getSocket()
+    const handleQrNewOrder = (payload) => {
+      const tableLabel = payload?.tableNumber != null
+        ? `Mesa ${payload.tableNumber}`
+        : payload?.tableId
+          ? `Mesa ${payload.tableId}`
+          : 'Mesa'
+      const salonLabel = String(payload?.salonName || '').trim()
+      const detail = salonLabel ? `${tableLabel} · ${salonLabel}` : tableLabel
+
+      toast.info('Nuevo pedido QR pendiente', {
+        description: detail,
+      })
+
+      void playQrNotification()
+    }
+
+    socket.on('qr.new-order', handleQrNewOrder)
+
+    return () => {
+      socket.off('qr.new-order', handleQrNewOrder)
+    }
+  }, [canReceiveQrAlerts, playQrNotification])
 
   const handleOpenUserMenu = (event) => {
     setAnchorEl(event.currentTarget)
@@ -153,6 +191,27 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
             <Typography className={`header-user-connection ${isSocketOnline ? 'ok' : 'fail'}`} variant="caption">
               {connectionLabel}
             </Typography>
+
+            {canReceiveQrAlerts && (
+              <div className="header-user-toggle-card">
+                <div>
+                  <Typography className="header-user-toggle-title" variant="body2">
+                    Sonido pedidos QR
+                  </Typography>
+                  <Typography className="header-user-toggle-copy" variant="caption">
+                    Aviso especial cuando una mesa envia un pedido para aprobacion.
+                  </Typography>
+                </div>
+                <Button
+                  onClick={toggleQrNotificationMuted}
+                  size="small"
+                  startIcon={qrNotificationMuted ? <NotificationsOffRoundedIcon fontSize="small" /> : <NotificationsActiveRoundedIcon fontSize="small" />}
+                  variant={qrNotificationMuted ? 'outlined' : 'contained'}
+                >
+                  {qrNotificationMuted ? 'Silenciado' : 'Activo'}
+                </Button>
+              </div>
+            )}
 
             <Button onClick={handleLogout} size="small" startIcon={<LogoutRoundedIcon fontSize="small" />} variant="contained">
               Cerrar sesion

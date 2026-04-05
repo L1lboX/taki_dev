@@ -202,6 +202,19 @@ textarea:focus {
   color: #b0bfd8;
 }
 
+.app-shell[data-app-theme='dark'] .header-user-toggle-card {
+  border-color: #334765;
+  background: #141f33;
+}
+
+.app-shell[data-app-theme='dark'] .header-user-toggle-title {
+  color: #eaf0ff;
+}
+
+.app-shell[data-app-theme='dark'] .header-user-toggle-copy {
+  color: #b0bfd8;
+}
+
 
 .app-header {
   position: fixed;
@@ -682,6 +695,28 @@ textarea:focus {
 
 .header-user-connection.fail {
   color: #c62828;
+}
+
+.header-user-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface2);
+}
+
+.header-user-toggle-title {
+  font-weight: 700 !important;
+  color: var(--txt);
+}
+
+.header-user-toggle-copy {
+  display: block;
+  margin-top: 2px;
+  color: var(--txt2);
 }
 
 .parpadeo {

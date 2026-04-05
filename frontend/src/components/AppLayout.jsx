@@ -1,5 +1,5 @@
 ﻿import { ThemeProvider } from '@mui/material/styles'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { AppShellThemeProvider, useAppShellTheme } from './header/AppShellThemeContext'
@@ -159,6 +159,11 @@ function resolveVisibleGroups(role) {
     .filter((group) => group.items.length > 0)
 }
 
+function getInitialViewportMatch() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(max-width: 980px)').matches
+}
+
 function AppLayoutShell() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -167,10 +172,68 @@ function AppLayoutShell() {
 
   const navGroups = useMemo(() => resolveVisibleGroups(user?.role), [user?.role])
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isMobileViewport, setIsMobileViewport] = useState(getInitialViewportMatch)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [openSubmenus, setOpenSubmenus] = useState({
     finanzas: true,
     'menu-restaurante': false,
   })
+
+  const isCompactDesktopSidebar = isSidebarCollapsed && !isMobileViewport
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const mediaQuery = window.matchMedia('(max-width: 980px)')
+    const syncViewport = (event) => {
+      setIsMobileViewport(event.matches)
+    }
+
+    setIsMobileViewport(mediaQuery.matches)
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncViewport)
+      return () => mediaQuery.removeEventListener('change', syncViewport)
+    }
+
+    mediaQuery.addListener(syncViewport)
+    return () => mediaQuery.removeListener(syncViewport)
+  }, [])
+
+  useEffect(() => {
+    setIsMobileSidebarOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setIsMobileSidebarOpen(false)
+    }
+  }, [isMobileViewport])
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileSidebarOpen) {
+      document.body.style.overflow = ''
+      return undefined
+    }
+
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isMobileSidebarOpen, isMobileViewport])
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileSidebarOpen) return undefined
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsMobileSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isMobileSidebarOpen, isMobileViewport])
 
   const toggleSubmenu = (submenuId) => {
     setOpenSubmenus((prev) => ({
@@ -179,26 +242,60 @@ function AppLayoutShell() {
     }))
   }
 
+  const closeMobileSidebar = () => {
+    setIsMobileSidebarOpen(false)
+  }
+
+  const toggleMobileSidebar = () => {
+    setIsMobileSidebarOpen((prev) => !prev)
+  }
+
   return (
     <ThemeProvider theme={muiTheme}>
-      <div className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} data-app-theme={themeMode}>
-        <aside className={`side-panel ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      <div
+        className={`app-shell ${isCompactDesktopSidebar ? 'sidebar-collapsed' : ''} ${isMobileViewport ? 'mobile-viewport' : ''} ${
+          isMobileSidebarOpen ? 'mobile-nav-open' : ''
+        }`}
+        data-app-theme={themeMode}
+      >
+        <button
+          aria-hidden={!isMobileSidebarOpen}
+          className={`mobile-sidebar-backdrop ${isMobileSidebarOpen ? 'open' : ''}`}
+          onClick={closeMobileSidebar}
+          tabIndex={isMobileSidebarOpen ? 0 : -1}
+          type="button"
+        />
+
+        <aside className={`side-panel ${isCompactDesktopSidebar ? 'collapsed' : ''} ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
           <div className="sidebar-top-row">
-            <button
-              aria-label={isSidebarCollapsed ? 'Expandir sidebar' : 'Minimizar sidebar'}
-              className="sidebar-toggle-btn"
-              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-              type="button"
-            >
-              {isSidebarCollapsed ? '>' : '<'}
-            </button>
+            {!isMobileViewport && (
+              <button
+                aria-label={isSidebarCollapsed ? 'Expandir sidebar' : 'Minimizar sidebar'}
+                className="sidebar-toggle-btn"
+                onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+                type="button"
+              >
+                {isSidebarCollapsed ? '>' : '<'}
+              </button>
+            )}
+
+            {isMobileViewport && (
+              <button
+                aria-label="Cerrar menu lateral"
+                className="sidebar-mobile-close"
+                onClick={closeMobileSidebar}
+                type="button"
+              >
+                <i className="fi fi-rr-cross-small" />
+              </button>
+            )}
           </div>
 
           <div className="sidebar-brand">
-            <div className="sidebar-logo-placeholder" aria-hidden="true">
+            <div aria-hidden="true" className="sidebar-logo-placeholder">
               <i className="fi fi-rr-restaurant" />
             </div>
-            {!isSidebarCollapsed && (
+            {!isCompactDesktopSidebar && (
               <div className="sidebar-brand-copy">
                 <p className="sidebar-brand-kicker">Restaurante</p>
                 <p className="sidebar-brand-name">Taki</p>
@@ -209,7 +306,7 @@ function AppLayoutShell() {
           <nav className="nav-list">
             {navGroups.map((group) => (
               <section className="sidebar-group" key={group.label}>
-                {!isSidebarCollapsed && <p className="sidebar-group-title">{group.label}</p>}
+                {!isCompactDesktopSidebar && <p className="sidebar-group-title">{group.label}</p>}
 
                 <div className="sidebar-group-list">
                   {group.items.map((item) => {
@@ -217,7 +314,7 @@ function AppLayoutShell() {
                       const childActive = item.children.some((child) => isPathActive(location.pathname, child.to))
                       const isOpen = childActive || Boolean(openSubmenus[item.id])
 
-                      if (isSidebarCollapsed) {
+                      if (isCompactDesktopSidebar) {
                         return (
                           <button
                             className={`nav-item nav-parent icon-only ${childActive ? 'active' : ''}`}
@@ -251,9 +348,10 @@ function AppLayoutShell() {
                                 <NavLink
                                   className={({ isActive }) => `nav-subitem ${isActive ? 'active' : ''}`}
                                   key={child.to}
+                                  onClick={closeMobileSidebar}
                                   to={child.to}
                                 >
-                                  <span className="nav-bullet" aria-hidden="true">•</span>
+                                  <span aria-hidden="true" className="nav-bullet">•</span>
                                   <span>{child.label}</span>
                                 </NavLink>
                               ))}
@@ -265,13 +363,14 @@ function AppLayoutShell() {
 
                     return (
                       <NavLink
-                        className={({ isActive }) => `nav-item ${isSidebarCollapsed ? 'icon-only' : ''} ${isActive ? 'active' : ''}`}
+                        className={({ isActive }) => `nav-item ${isCompactDesktopSidebar ? 'icon-only' : ''} ${isActive ? 'active' : ''}`}
                         key={item.to}
-                        title={isSidebarCollapsed ? item.label : undefined}
+                        onClick={closeMobileSidebar}
+                        title={isCompactDesktopSidebar ? item.label : undefined}
                         to={item.to}
                       >
                         <span className="nav-icon"><i className={`fi ${ICONS[item.icon]}`} /></span>
-                        {!isSidebarCollapsed && <span className="nav-label">{item.label}</span>}
+                        {!isCompactDesktopSidebar && <span className="nav-label">{item.label}</span>}
                       </NavLink>
                     )
                   })}
@@ -282,7 +381,11 @@ function AppLayoutShell() {
         </aside>
 
         <main className="main-content">
-          <HeaderBar />
+          <HeaderBar
+            isMobileMenuOpen={isMobileSidebarOpen}
+            onToggleMobileMenu={toggleMobileSidebar}
+            showMobileMenuButton={isMobileViewport}
+          />
           <div className="main-content-body">
             <Outlet />
           </div>
@@ -299,3 +402,4 @@ export default function AppLayout() {
     </AppShellThemeProvider>
   )
 }
+

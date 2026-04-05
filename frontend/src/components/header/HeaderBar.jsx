@@ -1,6 +1,8 @@
-﻿import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
+﻿import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded'
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded'
 import WifiTetheringRoundedIcon from '@mui/icons-material/WifiTetheringRounded'
@@ -42,7 +44,7 @@ function formatRole(role) {
   return catalog[role] || 'Usuario'
 }
 
-export default function HeaderBar() {
+export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu, showMobileMenuButton = false }) {
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const queryClient = useQueryClient()
@@ -82,9 +84,19 @@ export default function HeaderBar() {
 
   return (
     <header className="app-header-bar">
-      <div className="header-bar-copy">
-        <p className="header-kicker">Panel operativo</p>
-        <p className="header-title">TAKI</p>
+      <div className="header-bar-leading">
+        {showMobileMenuButton && (
+          <Tooltip arrow title={isMobileMenuOpen ? 'Cerrar menu' : 'Abrir menu'}>
+            <IconButton className="header-icon-btn header-mobile-toggle" onClick={onToggleMobileMenu} size="small">
+              {isMobileMenuOpen ? <CloseRoundedIcon fontSize="small" /> : <MenuRoundedIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+        )}
+
+        <div className="header-bar-copy">
+          <p className="header-kicker">Panel operativo</p>
+          <p className="header-title">TAKI</p>
+        </div>
       </div>
 
       <Stack alignItems="center" className="header-actions" direction="row" spacing={1}>
@@ -151,3 +163,4 @@ export default function HeaderBar() {
     </header>
   )
 }
+

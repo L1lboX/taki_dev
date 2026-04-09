@@ -113,6 +113,15 @@ router.patch(
   }),
 )
 
+router.delete(
+  '/sections/:sectionId',
+  requireAuth,
+  requireRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    return res.json(db.deleteMenuSection(req.params.sectionId))
+  }),
+)
+
 router.get(
   '/categories',
   requireAuth,
@@ -141,6 +150,15 @@ router.patch(
   asyncRoute(async (req, res) => {
     const payload = categoryUpdateSchema.parse(req.body)
     return res.json(db.updateMenuCategory(req.params.categoryId, payload))
+  }),
+)
+
+router.delete(
+  '/categories/:categoryId',
+  requireAuth,
+  requireRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    return res.json(db.deleteMenuCategory(req.params.categoryId))
   }),
 )
 
@@ -176,6 +194,15 @@ router.patch(
   asyncRoute(async (req, res) => {
     const payload = productUpdateSchema.parse(req.body)
     return res.json(db.updateMenuProduct(req.params.productId, payload))
+  }),
+)
+
+router.delete(
+  '/products/:productId',
+  requireAuth,
+  requireRoles(ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    return res.json(db.deleteMenuProduct(req.params.productId))
   }),
 )
 

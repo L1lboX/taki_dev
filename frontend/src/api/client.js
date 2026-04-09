@@ -251,6 +251,7 @@ export const api = {
   },
   createMenuSection: (body) => apiRequest('/menu/sections', { method: 'POST', body: JSON.stringify(body) }),
   updateMenuSection: (sectionId, body) => apiRequest(`/menu/sections/${sectionId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteMenuSection: (sectionId) => apiRequest(`/menu/sections/${sectionId}`, { method: 'DELETE' }),
   getMenuCategories: ({ sectionId, active } = {}) => {
     const params = new URLSearchParams()
     if (sectionId) params.set('sectionId', sectionId)
@@ -260,6 +261,7 @@ export const api = {
   },
   createMenuCategory: (body) => apiRequest('/menu/categories', { method: 'POST', body: JSON.stringify(body) }),
   updateMenuCategory: (categoryId, body) => apiRequest(`/menu/categories/${categoryId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteMenuCategory: (categoryId) => apiRequest(`/menu/categories/${categoryId}`, { method: 'DELETE' }),
   getMenuProducts: ({ sectionId, categoryId, active, status, isPublic } = {}) => {
     const params = new URLSearchParams()
     if (sectionId) params.set('sectionId', sectionId)
@@ -272,6 +274,7 @@ export const api = {
   },
   createMenuProduct: (body) => apiRequest('/menu/products', { method: 'POST', body: JSON.stringify(body) }),
   updateMenuProduct: (productId, body) => apiRequest(`/menu/products/${productId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteMenuProduct: (productId) => apiRequest(`/menu/products/${productId}`, { method: 'DELETE' }),
 
   getCustomers: ({ active } = {}) => {
     const params = new URLSearchParams()

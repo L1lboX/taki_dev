@@ -640,6 +640,11 @@ function upsertCatalogFromMenuProduct(product) {
   syncCatalogState()
 }
 
+function removeCatalogFromMenuProduct(productId) {
+  state.catalog = state.catalog.filter((item) => item.id !== productId)
+  syncCatalogState()
+}
+
 function enqueuePersist() {
   if (!isStatePersistenceEnabled()) return
   if (persistTimer) return
@@ -2324,6 +2329,20 @@ db.updateMenuSection = function updateMenuSection(sectionId, payload) {
   return clone(section)
 }
 
+db.deleteMenuSection = function deleteMenuSection(sectionId) {
+  ensureBusinessState()
+  const sectionIndex = state.menuSections.findIndex((row) => row.id === sectionId)
+  if (sectionIndex < 0) throw new Error('Seccion no existe')
+
+  const linkedCategories = state.menuCategories.filter((row) => row.sectionId === sectionId)
+  if (linkedCategories.length) {
+    throw new Error('No puedes eliminar una seccion con categorias asociadas')
+  }
+
+  const [deleted] = state.menuSections.splice(sectionIndex, 1)
+  return clone(deleted)
+}
+
 db.listMenuCategories = function listMenuCategories({ sectionId, active } = {}) {
   ensureBusinessState()
   let rows = [...state.menuCategories]
@@ -2392,6 +2411,20 @@ db.updateMenuCategory = function updateMenuCategory(categoryId, payload) {
 
   category.updatedAt = nowIso()
   return clone(category)
+}
+
+db.deleteMenuCategory = function deleteMenuCategory(categoryId) {
+  ensureBusinessState()
+  const categoryIndex = state.menuCategories.findIndex((row) => row.id === categoryId)
+  if (categoryIndex < 0) throw new Error('Categoria no existe')
+
+  const linkedProducts = state.menuProducts.filter((row) => row.categoryId === categoryId)
+  if (linkedProducts.length) {
+    throw new Error('No puedes eliminar una categoria con productos asociados')
+  }
+
+  const [deleted] = state.menuCategories.splice(categoryIndex, 1)
+  return clone(deleted)
 }
 
 db.listMenuProducts = function listMenuProducts({ sectionId, categoryId, active, status, isPublic } = {}) {
@@ -2512,6 +2545,17 @@ db.updateMenuProduct = function updateMenuProduct(productId, payload) {
 
   upsertCatalogFromMenuProduct(product)
   return clone(product)
+}
+
+db.deleteMenuProduct = function deleteMenuProduct(productId) {
+  ensureBusinessState()
+  const productIndex = state.menuProducts.findIndex((row) => row.id === productId)
+  if (productIndex < 0) throw new Error('Producto no existe')
+
+  const [deleted] = state.menuProducts.splice(productIndex, 1)
+  removeCatalogFromMenuProduct(productId)
+
+  return clone(deleted)
 }
 
 db.generateBills = function generateBills({ tableSessionId, tableId } = {}) {
@@ -2919,10 +2963,13 @@ const mutatingMethods = new Set([
   'updateCustomer',
   'createMenuSection',
   'updateMenuSection',
+  'deleteMenuSection',
   'createMenuCategory',
   'updateMenuCategory',
+  'deleteMenuCategory',
   'createMenuProduct',
   'updateMenuProduct',
+  'deleteMenuProduct',
   'generateBills',
   'payBill',
   'openCashRegister',

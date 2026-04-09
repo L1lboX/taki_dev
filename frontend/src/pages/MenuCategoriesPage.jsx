@@ -1,44 +1,85 @@
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded'
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
+import {
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
+import { ConfirmDeleteDialog, MenuEmptyState, MenuPageShell, MenuPanel, menuAdminPalette } from '../components/menuAdmin/MenuAdminUi'
 import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
+
+const INITIAL_FORM = {
+  sectionId: '',
+  name: '',
+  description: '',
+  sortOrder: '1',
+  active: 'true',
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '-'
+  return parsed.toLocaleDateString('es-PE', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
 export default function MenuCategoriesPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const [sectionFilter, setSectionFilter] = useState('')
-  const [form, setForm] = useState({
-    sectionId: '',
-    name: '',
-    description: '',
-    sortOrder: '1',
-    active: true,
-  })
+
+  const [search, setSearch] = useState('')
+  const [sectionFilter, setSectionFilter] = useState('all')
+  const [activeFilter, setActiveFilter] = useState('all')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [form, setForm] = useState(INITIAL_FORM)
 
   const sectionsQuery = useQuery({
-    queryKey: scopedQueryKey('menu-sections', user),
-    queryFn: () => api.getMenuSections({ active: true }),
+    queryKey: scopedQueryKey('menu-sections', user, 'all'),
+    queryFn: () => api.getMenuSections({}),
   })
 
   const categoriesQuery = useQuery({
-    queryKey: scopedQueryKey('menu-categories', user, sectionFilter),
-    queryFn: () => api.getMenuCategories({ sectionId: sectionFilter || undefined }),
+    queryKey: scopedQueryKey('menu-categories', user, 'all'),
+    queryFn: () => api.getMenuCategories({}),
   })
 
   const createMutation = useMutation({
     mutationFn: api.createMenuCategory,
     onSuccess: async () => {
       toast.success('Categoria creada')
-      setForm({
-        sectionId: '',
-        name: '',
-        description: '',
-        sortOrder: '1',
-        active: true,
-      })
-      await queryClient.invalidateQueries({ queryKey: ['menu-categories'] })
+      setDialogOpen(false)
+      setForm(INITIAL_FORM)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['menu-categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['menu-products'] }),
+      ])
     },
     onError: (error) => toast.error(error.message),
   })
@@ -47,8 +88,38 @@ export default function MenuCategoriesPage() {
     mutationFn: ({ categoryId, body }) => api.updateMenuCategory(categoryId, body),
     onSuccess: async () => {
       toast.success('Categoria actualizada')
-      await queryClient.invalidateQueries({ queryKey: ['menu-categories'] })
-      await queryClient.invalidateQueries({ queryKey: ['menu-products'] })
+      setDialogOpen(false)
+      setEditingCategory(null)
+      setForm(INITIAL_FORM)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['menu-categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['menu-products'] }),
+      ])
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: api.deleteMenuCategory,
+    onSuccess: async () => {
+      toast.success('Categoria eliminada')
+      setDeleteTarget(null)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['menu-categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['menu-products'] }),
+      ])
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ categoryId, body }) => api.updateMenuCategory(categoryId, body),
+    onSuccess: async (_, variables) => {
+      toast.success(variables.body.active ? 'Categoria activada' : 'Categoria desactivada')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['menu-categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['menu-products'] }),
+      ])
     },
     onError: (error) => toast.error(error.message),
   })
@@ -57,180 +128,332 @@ export default function MenuCategoriesPage() {
   const rows = categoriesQuery.data || []
   const sectionById = useMemo(() => new Map(sections.map((section) => [section.id, section])), [sections])
 
-  function submitCreate(event) {
+  const filteredRows = useMemo(() => {
+    const needle = String(search || '').trim().toLowerCase()
+    return rows.filter((row) => {
+      const matchesSearch =
+        !needle ||
+        String(row.name || '').toLowerCase().includes(needle) ||
+        String(row.description || '').toLowerCase().includes(needle) ||
+        String(sectionById.get(row.sectionId)?.name || '').toLowerCase().includes(needle)
+      const matchesSection = sectionFilter === 'all' ? true : row.sectionId === sectionFilter
+      const matchesActive = activeFilter === 'all' ? true : String(row.active) === activeFilter
+      return matchesSearch && matchesSection && matchesActive
+    })
+  }, [activeFilter, rows, search, sectionById, sectionFilter])
+
+  const stats = useMemo(
+    () => [
+      { label: 'Total', value: rows.length, meta: 'Agrupaciones creadas en el menu' },
+      { label: 'Activas', value: rows.filter((row) => row.active).length, meta: 'Disponibles para productos' },
+      { label: 'Secciones en uso', value: new Set(rows.map((row) => row.sectionId)).size, meta: 'Cobertura del catalogo' },
+    ],
+    [rows],
+  )
+
+  function openCreateDialog() {
+    setEditingCategory(null)
+    setForm({
+      ...INITIAL_FORM,
+      sectionId: sections[0]?.id || '',
+    })
+    setDialogOpen(true)
+  }
+
+  function openEditDialog(category) {
+    setEditingCategory(category)
+    setForm({
+      sectionId: category.sectionId || '',
+      name: category.name || '',
+      description: category.description || '',
+      sortOrder: String(category.sortOrder || 1),
+      active: String(category.active !== false),
+    })
+    setDialogOpen(true)
+  }
+
+  function closeDialog() {
+    if (createMutation.isPending || updateMutation.isPending) return
+    setDialogOpen(false)
+    setEditingCategory(null)
+    setForm(INITIAL_FORM)
+  }
+
+  function submitForm(event) {
     event.preventDefault()
-    const sectionId = String(form.sectionId || sections[0]?.id || '').trim()
+    const sectionId = String(form.sectionId || '').trim()
     const name = String(form.name || '').trim()
+
     if (!sectionId) {
       toast.error('Selecciona una seccion')
       return
     }
     if (!name) {
-      toast.error('Ingresa nombre de categoria')
+      toast.error('Ingresa el nombre de la categoria')
       return
     }
 
-    createMutation.mutate({
+    const payload = {
       sectionId,
       name,
       description: String(form.description || '').trim() || undefined,
-      sortOrder: Number(form.sortOrder || 1),
-      active: Boolean(form.active),
-    })
+      sortOrder: Math.max(1, Number(form.sortOrder || 1)),
+      active: form.active === 'true',
+    }
+
+    if (editingCategory) {
+      updateMutation.mutate({ categoryId: editingCategory.id, body: payload })
+      return
+    }
+
+    createMutation.mutate(payload)
   }
 
-  function editCategory(category) {
-    const nextName = window.prompt('Nombre de categoria', category.name || '')
-    if (nextName == null) return
-    const nextSectionId = window.prompt('Section ID', category.sectionId || '')
-    if (nextSectionId == null) return
-    const nextOrder = window.prompt('Orden', String(category.sortOrder || 1))
-    if (nextOrder == null) return
-
-    updateMutation.mutate({
-      categoryId: category.id,
-      body: {
-        sectionId: String(nextSectionId || '').trim(),
-        name: String(nextName || '').trim(),
-        sortOrder: Number(nextOrder || category.sortOrder || 1),
-      },
-    })
-  }
-
-  function toggleActive(category) {
-    updateMutation.mutate({
+  function handleToggle(category) {
+    toggleMutation.mutate({
       categoryId: category.id,
       body: { active: !category.active },
     })
   }
 
   return (
-    <div className="page-stack">
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h2 className="section-title">Menu - Categorias</h2>
-            <p className="section-subtitle">Nivel 2 del menu: agrupacion de platos por seccion.</p>
-          </div>
-          <span className="badge">Total: {rows.length}</span>
-        </div>
-      </section>
+    <MenuPageShell
+      actionLabel="Agregar categoria"
+      onAction={openCreateDialog}
+      stats={stats}
+      subtitle="Agrupa productos por seccion sin mezclar formulario y listado en la misma superficie."
+      title="Categorias"
+    >
+      <MenuPanel
+        actions={
+          <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.25} sx={{ width: '100%' }}>
+            <TextField
+              fullWidth
+              label="Buscar"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Categoria, descripcion o seccion"
+              size="small"
+              value={search}
+            />
+            <TextField
+              label="Seccion"
+              onChange={(event) => setSectionFilter(event.target.value)}
+              select
+              size="small"
+              sx={{ minWidth: { lg: 200 } }}
+              value={sectionFilter}
+            >
+              <MenuItem value="all">Todas</MenuItem>
+              {sections.map((section) => (
+                <MenuItem key={section.id} value={section.id}>
+                  {section.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Estado"
+              onChange={(event) => setActiveFilter(event.target.value)}
+              select
+              size="small"
+              sx={{ minWidth: { lg: 180 } }}
+              value={activeFilter}
+            >
+              <MenuItem value="all">Todas</MenuItem>
+              <MenuItem value="true">Activas</MenuItem>
+              <MenuItem value="false">Inactivas</MenuItem>
+            </TextField>
+          </Stack>
+        }
+        subtitle="Cada categoria queda visible con su seccion, orden y estado operativo."
+        title="Listado de categorias"
+      >
+        {sectionsQuery.isLoading || categoriesQuery.isLoading ? (
+          <Typography sx={{ color: menuAdminPalette.muted }}>Cargando categorias...</Typography>
+        ) : !filteredRows.length ? (
+          <MenuEmptyState
+            description="No encontramos categorias con esos filtros. Crea una nueva o cambia la seccion seleccionada."
+            title="Sin categorias para mostrar"
+          />
+        ) : (
+          <TableContainer sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 940 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Categoria</TableCell>
+                  <TableCell>Seccion</TableCell>
+                  <TableCell>Orden</TableCell>
+                  <TableCell>Descripcion</TableCell>
+                  <TableCell>Estado</TableCell>
+                  <TableCell>Actualizada</TableCell>
+                  <TableCell align="right">Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredRows.map((row) => (
+                  <TableRow hover key={row.id}>
+                    <TableCell>
+                      <Stack spacing={0.5}>
+                        <Typography sx={{ color: menuAdminPalette.ink, fontSize: 15, fontWeight: 700 }}>
+                          {row.name}
+                        </Typography>
+                        <Typography sx={{ color: menuAdminPalette.muted, fontSize: 12.5 }}>
+                          ID: {row.id.slice(0, 8)}
+                        </Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{sectionById.get(row.sectionId)?.name || '-'}</TableCell>
+                    <TableCell>{row.sortOrder || '-'}</TableCell>
+                    <TableCell sx={{ color: menuAdminPalette.muted, maxWidth: 280 }}>
+                      {row.description || 'Sin descripcion'}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        color={row.active ? 'success' : 'default'}
+                        label={row.active ? 'Activa' : 'Inactiva'}
+                        size="small"
+                        sx={{
+                          fontWeight: 700,
+                          ...(row.active
+                            ? { bgcolor: '#edf8f0', color: '#216a38' }
+                            : { bgcolor: '#f3f4f6', color: '#64748b' }),
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>{formatDate(row.updatedAt)}</TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" justifyContent="flex-end" spacing={1} useFlexGap flexWrap="wrap">
+                        <Button onClick={() => openEditDialog(row)} size="small" startIcon={<EditRoundedIcon />} sx={{ textTransform: 'none' }}>
+                          Editar
+                        </Button>
+                        <Button
+                          onClick={() => handleToggle(row)}
+                          size="small"
+                          startIcon={row.active ? <VisibilityOffRoundedIcon /> : <VisibilityRoundedIcon />}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          {row.active ? 'Desactivar' : 'Activar'}
+                        </Button>
+                        <Button
+                          color="error"
+                          onClick={() => setDeleteTarget(row)}
+                          size="small"
+                          startIcon={<DeleteOutlineRoundedIcon />}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          Eliminar
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </MenuPanel>
 
-      <section className="panel">
-        <div className="section-head">
-          <h3 className="section-title">Nueva categoria</h3>
-        </div>
-
-        <form className="form-grid-3" onSubmit={submitCreate} style={{ marginTop: 12 }}>
-          <div>
-            <label className="form-label">Seccion</label>
-            <select
+      <Dialog
+        fullWidth
+        maxWidth="sm"
+        onClose={closeDialog}
+        open={dialogOpen}
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            border: `1px solid ${menuAdminPalette.line}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ color: menuAdminPalette.ink, fontWeight: 800 }}>
+          {editingCategory ? 'Editar categoria' : 'Nueva categoria'}
+        </DialogTitle>
+        <Box component="form" onSubmit={submitForm}>
+          <DialogContent sx={{ display: 'grid', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="Seccion"
               onChange={(event) => setForm((prev) => ({ ...prev, sectionId: event.target.value }))}
+              select
+              size="small"
               value={form.sectionId}
             >
-              <option value="">Selecciona seccion</option>
               {sections.map((section) => (
-                <option key={section.id} value={section.id}>{section.name}</option>
+                <MenuItem key={section.id} value={section.id}>
+                  {section.name}
+                </MenuItem>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="form-label">Nombre</label>
-            <input onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} value={form.name} />
-          </div>
-          <div>
-            <label className="form-label">Orden</label>
-            <input
-              min={1}
-              onChange={(event) => setForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
-              type="number"
-              value={form.sortOrder}
-            />
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label className="form-label">Descripcion</label>
-            <input
+            </TextField>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                autoFocus
+                fullWidth
+                label="Nombre"
+                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                size="small"
+                value={form.name}
+              />
+              <TextField
+                fullWidth
+                label="Orden"
+                onChange={(event) => setForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
+                size="small"
+                type="number"
+                value={form.sortOrder}
+              />
+            </Stack>
+            <TextField
+              fullWidth
+              label="Descripcion"
+              minRows={3}
+              multiline
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+              size="small"
               value={form.description}
             />
-          </div>
-          <div>
-            <label className="form-label">Estado</label>
-            <select
-              onChange={(event) => setForm((prev) => ({ ...prev, active: event.target.value === 'true' }))}
-              value={String(form.active)}
+            <TextField
+              fullWidth
+              label="Estado"
+              onChange={(event) => setForm((prev) => ({ ...prev, active: event.target.value }))}
+              select
+              size="small"
+              value={form.active}
             >
-              <option value="true">Activa</option>
-              <option value="false">Inactiva</option>
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'end' }}>
-            <button className="btn btn-main" disabled={createMutation.isPending} type="submit">
-              Crear categoria
-            </button>
-          </div>
-        </form>
-      </section>
+              <MenuItem value="true">Activa</MenuItem>
+              <MenuItem value="false">Inactiva</MenuItem>
+            </TextField>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={closeDialog} sx={{ textTransform: 'none' }}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={createMutation.isPending || updateMutation.isPending}
+              sx={{ borderRadius: 999, px: 2.2, textTransform: 'none' }}
+              type="submit"
+              variant="contained"
+            >
+              {createMutation.isPending || updateMutation.isPending
+                ? 'Guardando...'
+                : editingCategory
+                  ? 'Guardar cambios'
+                  : 'Crear categoria'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
 
-      <section className="panel">
-        <div className="section-head">
-          <h3 className="section-title">Listado de categorias</h3>
-          <div className="inline-actions">
-            <label className="form-label">Filtrar por seccion</label>
-            <select onChange={(event) => setSectionFilter(event.target.value)} value={sectionFilter}>
-              <option value="">Todas</option>
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>{section.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {categoriesQuery.isLoading && <p className="alert alert-info" style={{ marginTop: 12 }}>Cargando categorias...</p>}
-        {!categoriesQuery.isLoading && !rows.length && <p className="alert alert-info" style={{ marginTop: 12 }}>No hay categorias registradas.</p>}
-
-        {!!rows.length && (
-          <div className="table-wrap" style={{ marginTop: 12 }}>
-            <table className="app-table">
-              <thead>
-                <tr>
-                  <th>Categoria</th>
-                  <th>Seccion</th>
-                  <th>Orden</th>
-                  <th>Estado</th>
-                  <th>Descripcion</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.name}</td>
-                    <td>{sectionById.get(row.sectionId)?.name || row.sectionName || '-'}</td>
-                    <td>{row.sortOrder}</td>
-                    <td>
-                      <span className={`status-pill ${row.active ? 'status-ready' : 'status-closed'}`}>
-                        {row.active ? 'ACTIVA' : 'INACTIVA'}
-                      </span>
-                    </td>
-                    <td>{row.description || '-'}</td>
-                    <td>
-                      <div className="inline-actions">
-                        <button className="btn btn-soft" onClick={() => editCategory(row)} type="button">
-                          Editar
-                        </button>
-                        <button className="btn btn-soft" onClick={() => toggleActive(row)} type="button">
-                          {row.active ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
+      <ConfirmDeleteDialog
+        description={
+          deleteTarget
+            ? `Se eliminara la categoria "${deleteTarget.name}". Si todavia tiene productos asociados, el backend impedira el borrado para no dejar el menu inconsistente.`
+            : ''
+        }
+        loading={deleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        open={Boolean(deleteTarget)}
+        title="Eliminar categoria"
+      />
+    </MenuPageShell>
   )
 }

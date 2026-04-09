@@ -1,5 +1,6 @@
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import PublicOffRoundedIcon from '@mui/icons-material/PublicOffRounded'
 import PublicRoundedIcon from '@mui/icons-material/PublicRounded'
 import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded'
@@ -29,7 +30,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
-import { ConfirmDeleteDialog, MenuEmptyState, MenuPageShell, MenuPanel, menuAdminPalette } from '../components/menuAdmin/MenuAdminUi'
+import {
+  ActionIconButton,
+  ConfirmDeleteDialog,
+  MenuDetailDialog,
+  MenuEmptyState,
+  MenuPageShell,
+  MenuPanel,
+  menuAdminPalette,
+} from '../components/menuAdmin/MenuAdminUi'
 import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
@@ -107,6 +116,7 @@ export default function MenuProductsPage() {
   })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [detailTarget, setDetailTarget] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
 
   const sectionsQuery = useQuery({
@@ -345,7 +355,7 @@ export default function MenuProductsPage() {
               gridTemplateColumns: {
                 xs: '1fr',
                 md: 'repeat(2, minmax(0, 1fr))',
-                xl: 'minmax(220px, 1.4fr) repeat(5, minmax(150px, 0.75fr))',
+                xl: 'minmax(220px, 1.35fr) repeat(5, minmax(150px, 0.72fr))',
               },
             }}
           >
@@ -476,9 +486,6 @@ export default function MenuProductsPage() {
                           <Typography sx={{ color: menuAdminPalette.ink, fontSize: 15, fontWeight: 700 }}>
                             {row.name}
                           </Typography>
-                          <Typography sx={{ color: menuAdminPalette.muted, fontSize: 12.5 }}>
-                            Costo {formatMoney(row.unitCost)} | IVA {Number(row.iva || 0)}%
-                          </Typography>
                         </Box>
                       </Stack>
                     </TableCell>
@@ -517,35 +524,36 @@ export default function MenuProductsPage() {
                     </TableCell>
                     <TableCell>{row.productionAreaId || 'COCINA'}</TableCell>
                     <TableCell align="right">
-                      <Stack direction="row" justifyContent="flex-end" spacing={1} useFlexGap flexWrap="wrap">
-                        <Button onClick={() => openEditDialog(row)} size="small" startIcon={<EditRoundedIcon />} sx={{ textTransform: 'none' }}>
-                          Editar
-                        </Button>
-                        <Button
+                      <Stack direction="row" justifyContent="flex-end" spacing={0.75} useFlexGap flexWrap="wrap">
+                        <ActionIconButton
+                          color="info"
+                          icon={<InfoOutlinedIcon fontSize="small" />}
+                          onClick={() => setDetailTarget(row)}
+                          title="Ver detalles"
+                        />
+                        <ActionIconButton
+                          icon={<EditRoundedIcon fontSize="small" />}
+                          onClick={() => openEditDialog(row)}
+                          title="Editar"
+                        />
+                        <ActionIconButton
+                          color={row.isActive ? 'warning' : 'success'}
+                          icon={row.isActive ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
                           onClick={() => handleToggleActive(row)}
-                          size="small"
-                          startIcon={row.isActive ? <VisibilityOffRoundedIcon /> : <VisibilityRoundedIcon />}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          {row.isActive ? 'Desactivar' : 'Activar'}
-                        </Button>
-                        <Button
+                          title={row.isActive ? 'Desactivar' : 'Activar'}
+                        />
+                        <ActionIconButton
+                          color={row.isPublic ? 'warning' : 'info'}
+                          icon={row.isPublic ? <PublicOffRoundedIcon fontSize="small" /> : <PublicRoundedIcon fontSize="small" />}
                           onClick={() => handleTogglePublic(row)}
-                          size="small"
-                          startIcon={row.isPublic ? <PublicOffRoundedIcon /> : <PublicRoundedIcon />}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          {row.isPublic ? 'Privar QR' : 'Publicar QR'}
-                        </Button>
-                        <Button
-                          color="error"
+                          title={row.isPublic ? 'Privar QR' : 'Publicar QR'}
+                        />
+                        <ActionIconButton
+                          color="danger"
+                          icon={<DeleteOutlineRoundedIcon fontSize="small" />}
                           onClick={() => setDeleteTarget(row)}
-                          size="small"
-                          startIcon={<DeleteOutlineRoundedIcon />}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          Eliminar
-                        </Button>
+                          title="Eliminar"
+                        />
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -561,7 +569,7 @@ export default function MenuProductsPage() {
         maxWidth="md"
         onClose={closeDialog}
         open={dialogOpen}
-        PaperProps={{ sx: { borderRadius: 4, border: `1px solid ${menuAdminPalette.line}` } }}
+        PaperProps={{ sx: { borderRadius: 3.5, border: `1px solid ${menuAdminPalette.line}` } }}
       >
         <DialogTitle sx={{ color: menuAdminPalette.ink, fontWeight: 800 }}>
           {form.id ? 'Editar producto' : 'Nuevo producto'}
@@ -713,7 +721,7 @@ export default function MenuProductsPage() {
             </Button>
             <Button
               disabled={createMutation.isPending || updateMutation.isPending}
-              sx={{ borderRadius: 999, px: 2.2, textTransform: 'none' }}
+              sx={{ borderRadius: 3, px: 2.2, textTransform: 'none' }}
               type="submit"
               variant="contained"
             >
@@ -739,6 +747,82 @@ export default function MenuProductsPage() {
         open={Boolean(deleteTarget)}
         title="Eliminar producto"
       />
+
+      <MenuDetailDialog
+        onClose={() => setDetailTarget(null)}
+        open={Boolean(detailTarget)}
+        subtitle="Detalle ampliado del producto seleccionado."
+        title={detailTarget?.name || 'Detalle de producto'}
+      >
+        {detailTarget ? (
+          <Stack spacing={1.5}>
+            {detailTarget.imageUrl ? (
+              <Box
+                alt={detailTarget.name}
+                component="img"
+                src={detailTarget.imageUrl}
+                sx={{
+                  width: '100%',
+                  maxHeight: 240,
+                  objectFit: 'cover',
+                  borderRadius: 2.5,
+                  border: `1px solid ${menuAdminPalette.line}`,
+                }}
+              />
+            ) : null}
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Seccion: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.sectionName || '-'}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Categoria: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.categoryName || '-'}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Area: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.productionAreaId || 'COCINA'}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Precio: <strong style={{ color: menuAdminPalette.ink }}>{formatMoney(detailTarget.price)}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Costo: <strong style={{ color: menuAdminPalette.ink }}>{formatMoney(detailTarget.unitCost)}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              IVA: <strong style={{ color: menuAdminPalette.ink }}>{Number(detailTarget.iva || 0)}%</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Stock: <strong style={{ color: menuAdminPalette.ink }}>{Number(detailTarget.quantity || 0)}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Estado: <strong style={{ color: menuAdminPalette.ink }}>{STATUS_LABELS[detailTarget.status] || detailTarget.status}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              QR: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.isPublic ? 'Publico' : 'Privado'}</strong>
+            </Typography>
+            <Box
+              sx={{
+                borderRadius: 2.5,
+                border: `1px solid ${menuAdminPalette.line}`,
+                p: 1.5,
+                bgcolor: '#f8fafc',
+              }}
+            >
+              <Typography sx={{ mb: 0.75, color: menuAdminPalette.ink, fontSize: 13.5, fontWeight: 700 }}>
+                Opciones
+              </Typography>
+              <Typography sx={{ color: menuAdminPalette.muted, fontSize: 14, lineHeight: 1.7 }}>
+                {detailTarget.options?.length
+                  ? detailTarget.options
+                      .map((option) =>
+                        Number(option.extraPrice || 0) > 0
+                          ? `${option.name} (+${formatMoney(option.extraPrice)})`
+                          : option.name,
+                      )
+                      .join(', ')
+                  : 'Sin opciones registradas.'}
+              </Typography>
+            </Box>
+          </Stack>
+        ) : null}
+      </MenuDetailDialog>
     </MenuPageShell>
   )
 }

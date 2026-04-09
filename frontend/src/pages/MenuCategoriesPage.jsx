@@ -1,5 +1,6 @@
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded'
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded'
 import {
@@ -25,7 +26,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
-import { ConfirmDeleteDialog, MenuEmptyState, MenuPageShell, MenuPanel, menuAdminPalette } from '../components/menuAdmin/MenuAdminUi'
+import {
+  ActionIconButton,
+  ConfirmDeleteDialog,
+  MenuDetailDialog,
+  MenuEmptyState,
+  MenuPageShell,
+  MenuPanel,
+  menuAdminPalette,
+} from '../components/menuAdmin/MenuAdminUi'
 import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
@@ -58,6 +67,7 @@ export default function MenuCategoriesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [detailTarget, setDetailTarget] = useState(null)
   const [form, setForm] = useState(INITIAL_FORM)
 
   const sectionsQuery = useQuery({
@@ -144,9 +154,9 @@ export default function MenuCategoriesPage() {
 
   const stats = useMemo(
     () => [
-      { label: 'Total', value: rows.length, meta: 'Agrupaciones creadas en el menu' },
+      { label: 'Total', value: rows.length, meta: 'Agrupaciones creadas' },
       { label: 'Activas', value: rows.filter((row) => row.active).length, meta: 'Disponibles para productos' },
-      { label: 'Secciones en uso', value: new Set(rows.map((row) => row.sectionId)).size, meta: 'Cobertura del catalogo' },
+      { label: 'Secciones en uso', value: new Set(rows.map((row) => row.sectionId)).size, meta: 'Cobertura actual' },
     ],
     [rows],
   )
@@ -226,7 +236,7 @@ export default function MenuCategoriesPage() {
     >
       <MenuPanel
         actions={
-          <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.25} sx={{ width: '100%' }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25} sx={{ width: '100%' }}>
             <TextField
               fullWidth
               label="Buscar"
@@ -282,7 +292,6 @@ export default function MenuCategoriesPage() {
                   <TableCell>Categoria</TableCell>
                   <TableCell>Seccion</TableCell>
                   <TableCell>Orden</TableCell>
-                  <TableCell>Descripcion</TableCell>
                   <TableCell>Estado</TableCell>
                   <TableCell>Actualizada</TableCell>
                   <TableCell align="right">Acciones</TableCell>
@@ -292,20 +301,12 @@ export default function MenuCategoriesPage() {
                 {filteredRows.map((row) => (
                   <TableRow hover key={row.id}>
                     <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography sx={{ color: menuAdminPalette.ink, fontSize: 15, fontWeight: 700 }}>
-                          {row.name}
-                        </Typography>
-                        <Typography sx={{ color: menuAdminPalette.muted, fontSize: 12.5 }}>
-                          ID: {row.id.slice(0, 8)}
-                        </Typography>
-                      </Stack>
+                      <Typography sx={{ color: menuAdminPalette.ink, fontSize: 15, fontWeight: 700 }}>
+                        {row.name}
+                      </Typography>
                     </TableCell>
                     <TableCell>{sectionById.get(row.sectionId)?.name || '-'}</TableCell>
                     <TableCell>{row.sortOrder || '-'}</TableCell>
-                    <TableCell sx={{ color: menuAdminPalette.muted, maxWidth: 280 }}>
-                      {row.description || 'Sin descripcion'}
-                    </TableCell>
                     <TableCell>
                       <Chip
                         color={row.active ? 'success' : 'default'}
@@ -321,27 +322,30 @@ export default function MenuCategoriesPage() {
                     </TableCell>
                     <TableCell>{formatDate(row.updatedAt)}</TableCell>
                     <TableCell align="right">
-                      <Stack direction="row" justifyContent="flex-end" spacing={1} useFlexGap flexWrap="wrap">
-                        <Button onClick={() => openEditDialog(row)} size="small" startIcon={<EditRoundedIcon />} sx={{ textTransform: 'none' }}>
-                          Editar
-                        </Button>
-                        <Button
+                      <Stack direction="row" justifyContent="flex-end" spacing={0.75}>
+                        <ActionIconButton
+                          color="info"
+                          icon={<InfoOutlinedIcon fontSize="small" />}
+                          onClick={() => setDetailTarget(row)}
+                          title="Ver detalles"
+                        />
+                        <ActionIconButton
+                          icon={<EditRoundedIcon fontSize="small" />}
+                          onClick={() => openEditDialog(row)}
+                          title="Editar"
+                        />
+                        <ActionIconButton
+                          color={row.active ? 'warning' : 'success'}
+                          icon={row.active ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
                           onClick={() => handleToggle(row)}
-                          size="small"
-                          startIcon={row.active ? <VisibilityOffRoundedIcon /> : <VisibilityRoundedIcon />}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          {row.active ? 'Desactivar' : 'Activar'}
-                        </Button>
-                        <Button
-                          color="error"
+                          title={row.active ? 'Desactivar' : 'Activar'}
+                        />
+                        <ActionIconButton
+                          color="danger"
+                          icon={<DeleteOutlineRoundedIcon fontSize="small" />}
                           onClick={() => setDeleteTarget(row)}
-                          size="small"
-                          startIcon={<DeleteOutlineRoundedIcon />}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          Eliminar
-                        </Button>
+                          title="Eliminar"
+                        />
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -359,7 +363,7 @@ export default function MenuCategoriesPage() {
         open={dialogOpen}
         PaperProps={{
           sx: {
-            borderRadius: 4,
+            borderRadius: 3.5,
             border: `1px solid ${menuAdminPalette.line}`,
           },
         }}
@@ -428,7 +432,7 @@ export default function MenuCategoriesPage() {
             </Button>
             <Button
               disabled={createMutation.isPending || updateMutation.isPending}
-              sx={{ borderRadius: 999, px: 2.2, textTransform: 'none' }}
+              sx={{ borderRadius: 3, px: 2.2, textTransform: 'none' }}
               type="submit"
               variant="contained"
             >
@@ -454,6 +458,46 @@ export default function MenuCategoriesPage() {
         open={Boolean(deleteTarget)}
         title="Eliminar categoria"
       />
+
+      <MenuDetailDialog
+        onClose={() => setDetailTarget(null)}
+        open={Boolean(detailTarget)}
+        subtitle="Detalle ampliado de la categoria seleccionada."
+        title={detailTarget?.name || 'Detalle de categoria'}
+      >
+        {detailTarget ? (
+          <Stack spacing={1.25}>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Seccion:{' '}
+              <strong style={{ color: menuAdminPalette.ink }}>
+                {sectionById.get(detailTarget.sectionId)?.name || '-'}
+              </strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Orden: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.sortOrder || '-'}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              Estado: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.active ? 'Activa' : 'Inactiva'}</strong>
+            </Typography>
+            <Box
+              sx={{
+                mt: 0.5,
+                borderRadius: 2.5,
+                border: `1px solid ${menuAdminPalette.line}`,
+                p: 1.5,
+                bgcolor: '#f8fafc',
+              }}
+            >
+              <Typography sx={{ mb: 0.75, color: menuAdminPalette.ink, fontSize: 13.5, fontWeight: 700 }}>
+                Descripcion
+              </Typography>
+              <Typography sx={{ color: menuAdminPalette.muted, fontSize: 14, lineHeight: 1.7 }}>
+                {detailTarget.description || 'Sin descripcion registrada.'}
+              </Typography>
+            </Box>
+          </Stack>
+        ) : null}
+      </MenuDetailDialog>
     </MenuPageShell>
   )
 }

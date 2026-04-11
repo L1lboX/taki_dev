@@ -313,6 +313,7 @@ export default function MenuCategoriesPage() {
                         label={row.active ? 'Activa' : 'Inactiva'}
                         size="small"
                         sx={{
+                          borderRadius: '8px',
                           fontWeight: 700,
                           ...(row.active
                             ? { bgcolor: '#edf8f0', color: '#216a38' }
@@ -363,7 +364,7 @@ export default function MenuCategoriesPage() {
         open={dialogOpen}
         PaperProps={{
           sx: {
-            borderRadius: 3.5,
+            borderRadius: '12px',
             border: `1px solid ${menuAdminPalette.line}`,
           },
         }}
@@ -432,7 +433,7 @@ export default function MenuCategoriesPage() {
             </Button>
             <Button
               disabled={createMutation.isPending || updateMutation.isPending}
-              sx={{ borderRadius: 3, px: 2.2, textTransform: 'none' }}
+              sx={{ borderRadius: '10px', px: 2.2, textTransform: 'none' }}
               type="submit"
               variant="contained"
             >
@@ -482,7 +483,7 @@ export default function MenuCategoriesPage() {
             <Box
               sx={{
                 mt: 0.5,
-                borderRadius: 2.5,
+                borderRadius: '10px',
                 border: `1px solid ${menuAdminPalette.line}`,
                 p: 1.5,
                 bgcolor: '#f8fafc',

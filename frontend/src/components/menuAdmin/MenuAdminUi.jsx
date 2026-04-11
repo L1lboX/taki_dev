@@ -39,7 +39,7 @@ export function MenuPageShell({
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 4,
+          borderRadius: '12px',
           border: `1px solid ${menuAdminPalette.line}`,
           overflow: 'hidden',
           background: '#fff',
@@ -103,7 +103,7 @@ export function MenuPageShell({
                 sx={{
                   alignSelf: { xs: 'stretch', md: 'flex-start' },
                   minWidth: { md: 180 },
-                  borderRadius: 3,
+                  borderRadius: '10px',
                   px: 2,
                   py: 1,
                   fontWeight: 700,
@@ -132,7 +132,7 @@ export function MenuPageShell({
                 elevation={0}
                 key={stat.label}
                 sx={{
-                  borderRadius: 3,
+                  borderRadius: '10px',
                   border: `1px solid ${menuAdminPalette.line}`,
                   px: 1.5,
                   py: 1.35,
@@ -174,7 +174,7 @@ export function MenuPanel({ title, subtitle, actions, children }) {
     <Paper
       elevation={0}
       sx={{
-        borderRadius: 3.5,
+        borderRadius: '12px',
         border: `1px solid ${menuAdminPalette.line}`,
         backgroundColor: '#fff',
         overflow: 'hidden',
@@ -208,7 +208,7 @@ export function MenuEmptyState({ title, description }) {
         py: 6,
         px: 3,
         textAlign: 'center',
-        borderRadius: 3,
+        borderRadius: '10px',
         border: `1px dashed ${alpha(menuAdminPalette.ink, 0.16)}`,
         backgroundColor: alpha(menuAdminPalette.accent, 0.03),
       }}
@@ -238,7 +238,7 @@ export function ConfirmDeleteDialog({
       open={open}
       PaperProps={{
         sx: {
-          borderRadius: 3.5,
+          borderRadius: '12px',
           border: `1px solid ${menuAdminPalette.line}`,
         },
       }}
@@ -257,7 +257,7 @@ export function ConfirmDeleteDialog({
           color="error"
           disabled={loading}
           onClick={onConfirm}
-          sx={{ borderRadius: 3, px: 2, textTransform: 'none' }}
+          sx={{ borderRadius: '10px', px: 2, textTransform: 'none' }}
           variant="contained"
         >
           {loading ? 'Eliminando...' : 'Eliminar'}
@@ -282,7 +282,7 @@ export function MenuDetailDialog({
       open={open}
       PaperProps={{
         sx: {
-          borderRadius: 3.5,
+          borderRadius: '12px',
           border: `1px solid ${menuAdminPalette.line}`,
         },
       }}
@@ -297,7 +297,7 @@ export function MenuDetailDialog({
         {children}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
-        <Button onClick={onClose} sx={{ borderRadius: 3, textTransform: 'none' }}>
+        <Button onClick={onClose} sx={{ borderRadius: '10px', textTransform: 'none' }}>
           Cerrar
         </Button>
       </DialogActions>
@@ -348,7 +348,7 @@ export function ActionIconButton({
           onClick={onClick}
           size="small"
           sx={{
-            borderRadius: 2,
+            borderRadius: '8px',
             width: 34,
             height: 34,
             color: palette.fg,

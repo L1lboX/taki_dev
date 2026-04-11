@@ -50,6 +50,16 @@ const STATUS_LABELS = {
   OUT_OF_SEASON: 'Fuera de temporada',
 }
 
+const CATALOG_VISIBILITY_LABELS = {
+  true: 'En carta',
+  false: 'Oculto',
+}
+
+const QR_VISIBILITY_LABELS = {
+  true: 'Visible',
+  false: 'Oculto',
+}
+
 const INITIAL_FORM = {
   id: '',
   sectionId: '',
@@ -227,7 +237,7 @@ export default function MenuProductsPage() {
   const stats = useMemo(
     () => [
       { label: 'Total', value: rows.length, meta: 'Productos registrados' },
-      { label: 'Activos', value: rows.filter((row) => row.isActive !== false).length, meta: 'Disponibles para operar' },
+      { label: 'En carta', value: rows.filter((row) => row.isActive !== false).length, meta: 'Mostrados en operacion' },
       { label: 'Publicos QR', value: rows.filter((row) => row.isPublic !== false).length, meta: 'Visibles para cliente' },
       { label: 'Agotados', value: rows.filter((row) => row.status === 'OUT_OF_STOCK').length, meta: 'Necesitan reposicion' },
     ],
@@ -400,7 +410,7 @@ export default function MenuProductsPage() {
               ))}
             </TextField>
             <TextField
-              label="Estado"
+              label="Disponibilidad"
               onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
               select
               size="small"
@@ -412,15 +422,15 @@ export default function MenuProductsPage() {
               ))}
             </TextField>
             <TextField
-              label="Activo"
+              label="Carta"
               onChange={(event) => setFilters((prev) => ({ ...prev, active: event.target.value }))}
               select
               size="small"
               value={filters.active}
             >
               <MenuItem value="all">Todos</MenuItem>
-              <MenuItem value="true">Activos</MenuItem>
-              <MenuItem value="false">Inactivos</MenuItem>
+              <MenuItem value="true">En carta</MenuItem>
+              <MenuItem value="false">Ocultos</MenuItem>
             </TextField>
             <TextField
               label="QR"
@@ -430,12 +440,12 @@ export default function MenuProductsPage() {
               value={filters.isPublic}
             >
               <MenuItem value="all">Todos</MenuItem>
-              <MenuItem value="true">Publicos</MenuItem>
-              <MenuItem value="false">Privados</MenuItem>
+              <MenuItem value="true">Visible</MenuItem>
+              <MenuItem value="false">Oculto</MenuItem>
             </TextField>
           </Box>
         }
-        subtitle="El listado concentra precio, stock, estado y visibilidad publica del menu."
+        subtitle="El listado concentra precio, stock, disponibilidad y visibilidad del menu."
         title="Listado de productos"
       >
         {sectionsQuery.isLoading || categoriesQuery.isLoading || productsQuery.isLoading ? (
@@ -455,7 +465,8 @@ export default function MenuProductsPage() {
                   <TableCell>Categoria</TableCell>
                   <TableCell>Precio</TableCell>
                   <TableCell>Stock</TableCell>
-                  <TableCell>Estado</TableCell>
+                  <TableCell>Disponibilidad</TableCell>
+                  <TableCell>Carta</TableCell>
                   <TableCell>QR</TableCell>
                   <TableCell>Area</TableCell>
                   <TableCell align="right">Acciones</TableCell>
@@ -494,28 +505,35 @@ export default function MenuProductsPage() {
                     <TableCell>{formatMoney(row.price)}</TableCell>
                     <TableCell>{Number(row.quantity || 0)}</TableCell>
                     <TableCell>
-                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                        <Chip
-                          label={STATUS_LABELS[row.status] || row.status}
-                          size="small"
-                          sx={{ bgcolor: alpha(menuAdminPalette.accent, 0.08), color: menuAdminPalette.accent, fontWeight: 700 }}
-                        />
-                        <Chip
-                          label={row.isActive ? 'Activo' : 'Inactivo'}
-                          size="small"
-                          sx={{
-                            bgcolor: row.isActive ? '#edf8f0' : '#f3f4f6',
-                            color: row.isActive ? '#216a38' : '#64748b',
-                            fontWeight: 700,
-                          }}
-                        />
-                      </Stack>
+                      <Chip
+                        label={STATUS_LABELS[row.status] || row.status}
+                        size="small"
+                        sx={{
+                          borderRadius: '8px',
+                          bgcolor: alpha(menuAdminPalette.accent, 0.08),
+                          color: menuAdminPalette.accent,
+                          fontWeight: 700,
+                        }}
+                      />
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={row.isPublic ? 'Publico' : 'Privado'}
+                        label={CATALOG_VISIBILITY_LABELS[String(row.isActive)]}
                         size="small"
                         sx={{
+                          borderRadius: '8px',
+                          bgcolor: row.isActive ? '#edf8f0' : '#f3f4f6',
+                          color: row.isActive ? '#216a38' : '#64748b',
+                          fontWeight: 700,
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={QR_VISIBILITY_LABELS[String(row.isPublic)]}
+                        size="small"
+                        sx={{
+                          borderRadius: '8px',
                           bgcolor: row.isPublic ? alpha(menuAdminPalette.accent, 0.1) : '#fff7ed',
                           color: row.isPublic ? menuAdminPalette.accent : '#9a5b16',
                           fontWeight: 700,
@@ -540,13 +558,13 @@ export default function MenuProductsPage() {
                           color={row.isActive ? 'warning' : 'success'}
                           icon={row.isActive ? <VisibilityOffRoundedIcon fontSize="small" /> : <VisibilityRoundedIcon fontSize="small" />}
                           onClick={() => handleToggleActive(row)}
-                          title={row.isActive ? 'Desactivar' : 'Activar'}
+                          title={row.isActive ? 'Quitar de carta' : 'Mostrar en carta'}
                         />
                         <ActionIconButton
                           color={row.isPublic ? 'warning' : 'info'}
                           icon={row.isPublic ? <PublicOffRoundedIcon fontSize="small" /> : <PublicRoundedIcon fontSize="small" />}
                           onClick={() => handleTogglePublic(row)}
-                          title={row.isPublic ? 'Privar QR' : 'Publicar QR'}
+                          title={row.isPublic ? 'Ocultar de QR' : 'Mostrar en QR'}
                         />
                         <ActionIconButton
                           color="danger"
@@ -569,7 +587,7 @@ export default function MenuProductsPage() {
         maxWidth="md"
         onClose={closeDialog}
         open={dialogOpen}
-        PaperProps={{ sx: { borderRadius: 3.5, border: `1px solid ${menuAdminPalette.line}` } }}
+        PaperProps={{ sx: { borderRadius: '12px', border: `1px solid ${menuAdminPalette.line}` } }}
       >
         <DialogTitle sx={{ color: menuAdminPalette.ink, fontWeight: 800 }}>
           {form.id ? 'Editar producto' : 'Nuevo producto'}
@@ -623,7 +641,7 @@ export default function MenuProductsPage() {
               />
               <TextField
                 fullWidth
-                label="Estado"
+                label="Disponibilidad"
                 onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
                 select
                 size="small"
@@ -673,14 +691,14 @@ export default function MenuProductsPage() {
               />
               <TextField
                 fullWidth
-                label="Activo"
+                label="Carta"
                 onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.value }))}
                 select
                 size="small"
                 value={form.isActive}
               >
-                <MenuItem value="true">Activo</MenuItem>
-                <MenuItem value="false">Inactivo</MenuItem>
+                <MenuItem value="true">En carta</MenuItem>
+                <MenuItem value="false">Oculto</MenuItem>
               </TextField>
               <TextField
                 fullWidth
@@ -690,8 +708,8 @@ export default function MenuProductsPage() {
                 size="small"
                 value={form.isPublic}
               >
-                <MenuItem value="true">Publico</MenuItem>
-                <MenuItem value="false">Privado</MenuItem>
+                <MenuItem value="true">Visible</MenuItem>
+                <MenuItem value="false">Oculto</MenuItem>
               </TextField>
             </Stack>
 
@@ -721,7 +739,7 @@ export default function MenuProductsPage() {
             </Button>
             <Button
               disabled={createMutation.isPending || updateMutation.isPending}
-              sx={{ borderRadius: 3, px: 2.2, textTransform: 'none' }}
+              sx={{ borderRadius: '10px', px: 2.2, textTransform: 'none' }}
               type="submit"
               variant="contained"
             >
@@ -792,14 +810,17 @@ export default function MenuProductsPage() {
               Stock: <strong style={{ color: menuAdminPalette.ink }}>{Number(detailTarget.quantity || 0)}</strong>
             </Typography>
             <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
-              Estado: <strong style={{ color: menuAdminPalette.ink }}>{STATUS_LABELS[detailTarget.status] || detailTarget.status}</strong>
+              Disponibilidad: <strong style={{ color: menuAdminPalette.ink }}>{STATUS_LABELS[detailTarget.status] || detailTarget.status}</strong>
             </Typography>
             <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
-              QR: <strong style={{ color: menuAdminPalette.ink }}>{detailTarget.isPublic ? 'Publico' : 'Privado'}</strong>
+              Carta: <strong style={{ color: menuAdminPalette.ink }}>{CATALOG_VISIBILITY_LABELS[String(detailTarget.isActive)]}</strong>
+            </Typography>
+            <Typography sx={{ color: menuAdminPalette.muted, fontSize: 13.5 }}>
+              QR: <strong style={{ color: menuAdminPalette.ink }}>{QR_VISIBILITY_LABELS[String(detailTarget.isPublic)]}</strong>
             </Typography>
             <Box
               sx={{
-                borderRadius: 2.5,
+                borderRadius: '10px',
                 border: `1px solid ${menuAdminPalette.line}`,
                 p: 1.5,
                 bgcolor: '#f8fafc',

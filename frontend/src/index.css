@@ -2710,6 +2710,11 @@ textarea:focus {
   gap: 12px;
 }
 
+.qr-empty-shell {
+  min-height: calc(100vh - 36px);
+  align-content: start;
+}
+
 .qr-simple-header {
   padding: 8px 4px 0;
 }

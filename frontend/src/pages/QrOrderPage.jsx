@@ -7,6 +7,7 @@ import { CATALOG_CATEGORIES } from '../lib/catalogMeta'
 import { orderStatusLabel } from '../lib/statusLabels'
 
 const RECOMMENDED_GROUP_IDS = ['MENU', 'PRINCIPALES', 'A_LA_CARTA']
+const RESTAURANT_NAME = 'TAKI'
 const PICKER = {
   ENTRY_INCLUDED: 'ENTRY_INCLUDED',
   ENTRY_EXTRA: 'ENTRY_EXTRA',
@@ -231,7 +232,6 @@ export default function QrOrderPage() {
   const activeGroupConfig = GROUP_CONFIG[activeGroupId] || null
   const resolvedTableId = qrAccessQuery.data?.tableId || tableId
   const qrToken = qrTokenFromUrl
-  const tableNumber = qrAccessQuery.data?.number != null ? String(qrAccessQuery.data.number) : ''
   const sessionOpen = Boolean(qrAccessQuery.data?.sessionOpen)
 
   const selectedMain = useMemo(
@@ -272,35 +272,10 @@ export default function QrOrderPage() {
     [groupBuckets],
   )
 
-  const featuredDish = useMemo(() => {
-    if (selectedMain) return selectedMain
-    const activeBucket = groupBuckets.find((bucket) => bucket.id === activeGroupId)
-    return activeBucket?.items?.[0] || groupBuckets[0]?.items?.[0] || null
-  }, [activeGroupId, groupBuckets, selectedMain])
-
-  const featuredDishGroupId = selectedMain
-    ? selectedMainGroupId
-    : (activeGroupId || groupBuckets[0]?.id || '')
-
-  const featuredDishImage = featuredDish
-    ? pickerImageUrl(featuredDish, featuredDishGroupId || PICKER.ENTRY_INCLUDED)
-    : ''
-
   const selectedVariantOptions = useMemo(
     () => (selectedMain?.variants || []).filter(Boolean),
     [selectedMain?.variants],
   )
-
-  const selectionSteps = [
-    { id: 'start', label: 'Inicia', active: Boolean(order) },
-    { id: 'dish', label: 'Plato', active: Boolean(selectedMain) },
-    {
-      id: 'extras',
-      label: 'Detalles',
-      active: Boolean(selectedEntry || selectedEntryExtrasData.length || selectedBeveragesData.length),
-    },
-    { id: 'send', label: 'Pide', active: Boolean(order?.items?.length) },
-  ]
 
   const pickerItems = useMemo(() => {
     if (!activePicker) return []
@@ -473,80 +448,11 @@ export default function QrOrderPage() {
   return (
     <div className="qr-customer-page">
       <div className="qr-customer-shell">
-        <section className="qr-hero-card qr-stage-hero">
-          <div className="qr-hero-grid">
-            <div className="qr-hero-copy">
-              <p className="qr-kicker">TAKI RESTAURANT</p>
-              <div className="qr-hero-title-row">
-                <h1 className="section-title">Carta QR para pedir con hambre y sin esperar de mas</h1>
-                <span className="badge qr-table-badge">Mesa {tableNumber || tableId}</span>
-              </div>
-              <p className="section-subtitle">
-                Elige tu categoria, arma la combinacion a tu gusto y envia el pedido para aprobacion del mesero.
-              </p>
+        <header className="qr-simple-header">
+          <h1 className="qr-simple-brand">{RESTAURANT_NAME}</h1>
+        </header>
 
-              <div className="qr-hero-actions">
-                <button
-                  className="btn btn-main qr-start-btn"
-                  onClick={() => createQrMutation.mutate()}
-                  type="button"
-                  disabled={!qrToken || qrAccessQuery.isPending || qrAccessQuery.isError || !sessionOpen || createQrMutation.isPending || Boolean(order)}
-                >
-                  {order ? 'Pedido QR activo' : 'Iniciar pedido QR'}
-                </button>
-                <span className={`qr-status-chip tone-${statusTone(order?.status)}`}>
-                  {order ? orderStatusLabel(order.status) : 'Listo para comenzar'}
-                </span>
-              </div>
-
-              <div className="qr-hero-stats">
-                <span className="badge">Items: {order?.items?.length || 0}</span>
-                <span className="badge">Parcial: {formatMoney(order?.totals?.total || draftSubtotal)}</span>
-                <span className="badge">Servicio: {serviceMode === 'TAKEAWAY' ? 'Para llevar' : 'En mesa'}</span>
-              </div>
-
-              <div className="qr-step-row">
-                {selectionSteps.map((step, index) => (
-                  <span className={`qr-step-pill ${step.active ? 'active' : ''}`} key={step.id}>
-                    {index + 1}. {step.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="qr-hero-art">
-              <div className="qr-hero-platter">
-                <div className="qr-hero-photo">
-                  {featuredDish && !imageFallbackById[featuredDish.id] && (
-                    <img
-                      alt={normalizeName(featuredDish.name)}
-                      loading="lazy"
-                      onError={() => markImageFallback(featuredDish.id)}
-                      src={featuredDishImage}
-                    />
-                  )}
-                  {(!featuredDish || imageFallbackById[featuredDish.id]) && (
-                    <div className="qr-dish-media-fallback">
-                      <span>{featuredDish ? normalizeName(featuredDish.name).slice(0, 1).toUpperCase() : 'T'}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="qr-hero-plaque">
-                  <p className="qr-hero-plaque-kicker">{selectedMain ? 'Tu eleccion actual' : 'Sugerencia de la casa'}</p>
-                  <h2 className="qr-hero-dish-title">
-                    {featuredDish ? normalizeName(featuredDish.name) : 'La carta de hoy ya esta lista'}
-                  </h2>
-                  <div className="qr-hero-plaque-meta">
-                    <span className="badge">
-                      {featuredDishGroupId ? GROUP_CONFIG[featuredDishGroupId]?.label || 'Carta' : 'Carta'}
-                    </span>
-                    {featuredDish && <span className="badge">{formatMoney(featuredDish.basePrice)}</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="qr-simple-notices">
           {qrTokenFromUrl && qrAccessQuery.isPending && (
             <p className="alert alert-info qr-alert-block">
               Validando codigo QR...
@@ -567,7 +473,7 @@ export default function QrOrderPage() {
               Esta mesa aun no tiene sesion activa. Pide al mesero que la abra para continuar.
             </p>
           )}
-        </section>
+        </div>
 
         <div className="qr-customer-layout">
           <section className="panel-soft qr-builder-panel">
@@ -825,6 +731,14 @@ export default function QrOrderPage() {
               <div className="qr-status-empty">
                 <p className="qr-status-empty-title">Aun no hay pedido activo en esta mesa.</p>
                 <p className="small muted">Inicia el pedido QR y luego agrega platos para que el mesero lo valide.</p>
+                <button
+                  className="btn btn-main qr-start-btn"
+                  onClick={() => createQrMutation.mutate()}
+                  type="button"
+                  disabled={!qrToken || qrAccessQuery.isPending || qrAccessQuery.isError || !sessionOpen || createQrMutation.isPending || Boolean(order)}
+                >
+                  {createQrMutation.isPending ? 'Iniciando...' : 'Iniciar pedido QR'}
+                </button>
               </div>
             )}
             {order && (

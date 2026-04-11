@@ -2710,6 +2710,23 @@ textarea:focus {
   gap: 12px;
 }
 
+.qr-simple-header {
+  padding: 8px 4px 0;
+}
+
+.qr-simple-brand {
+  margin: 0;
+  color: var(--qr-text, #201915);
+  font-size: clamp(2rem, 8vw, 3.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.qr-simple-notices {
+  display: grid;
+  gap: 10px;
+}
+
 .qr-hero-card {
   border: 1.5px solid var(--border);
   border-radius: 16px;
@@ -4766,6 +4783,8 @@ textarea:focus {
 
 .qr-customer-page .qr-status-empty {
   margin-top: 14px;
+  display: grid;
+  gap: 14px;
   border-radius: 22px;
   padding: 20px;
   background: rgba(255, 255, 255, 0.7);
@@ -4777,6 +4796,15 @@ textarea:focus {
   font-size: 18px;
   font-weight: 800;
   color: var(--qr-text);
+}
+
+.qr-customer-page .qr-status-empty .small {
+  margin: 0;
+}
+
+.qr-customer-page .qr-status-empty .qr-start-btn {
+  width: 100%;
+  justify-content: center;
 }
 
 .qr-customer-page .qr-order-stack {

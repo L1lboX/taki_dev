@@ -14,6 +14,11 @@ export function extractQrToken(req) {
   return String(token || '').trim()
 }
 
+export function extractQrGuestToken(req) {
+  const headerToken = req.headers['x-qr-guest-token']
+  return typeof headerToken === 'string' ? String(headerToken).trim() : ''
+}
+
 function resolvePublicTable(rawTableId) {
   const tableId = String(rawTableId || '').trim()
   if (!tableId) return null

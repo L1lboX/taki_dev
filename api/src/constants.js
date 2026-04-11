@@ -12,6 +12,16 @@ export const ORDER_SOURCE = {
   QR: 'QR',
 }
 
+export const TABLE_GUEST_SOURCE = {
+  WAITER: 'WAITER',
+  QR: 'QR',
+}
+
+export const TABLE_GUEST_STATUS = {
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+}
+
 export const ORDER_STATUS = {
   DRAFT: 'DRAFT',
   PENDING_WAITER_APPROVAL: 'PENDING_WAITER_APPROVAL',

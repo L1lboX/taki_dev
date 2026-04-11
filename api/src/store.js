@@ -14,6 +14,8 @@ import {
   ROLES,
   SERVICE_MODE,
   SPLIT_MODE,
+  TABLE_GUEST_SOURCE,
+  TABLE_GUEST_STATUS,
   TABLE_STATUS,
 } from './constants.js'
 import {
@@ -276,6 +278,8 @@ function createInitialState() {
     inventory: clone(inventory),
     tables: clone(seedTables),
     tableSessions: [],
+    tableGuestSessions: [],
+    tableGroups: [],
     orders: [],
     kitchenTickets: [],
     cashSessions: [],
@@ -342,6 +346,8 @@ function buildSnapshot() {
     inventory: state.inventory,
     tables: state.tables,
     tableSessions: state.tableSessions,
+    tableGuestSessions: state.tableGuestSessions,
+    tableGroups: state.tableGroups,
     orders: state.orders,
     kitchenTickets: state.kitchenTickets,
     cashSessions: state.cashSessions,
@@ -384,6 +390,8 @@ function hydrateFromSnapshot(snapshot) {
     inventory: clone(inventory),
     tables: clone(tables),
     tableSessions: clone(asArray(snapshot.tableSessions)),
+    tableGuestSessions: clone(asArray(snapshot.tableGuestSessions)),
+    tableGroups: clone(asArray(snapshot.tableGroups)),
     orders: clone(asArray(snapshot.orders)),
     kitchenTickets: clone(asArray(snapshot.kitchenTickets)),
     cashSessions: clone(asArray(snapshot.cashSessions)),
@@ -432,11 +440,125 @@ function nextSalonSortOrder() {
   return state.salons.reduce((max, salon) => Math.max(max, Number(salon.sortOrder) || 0), 0) + 1
 }
 
+function deriveGroupedCapacity(tableCount, fallbackCapacity = 4) {
+  const count = Number(tableCount) || 1
+  if (count <= 1) return Number(fallbackCapacity) || 4
+  if (count === 2) return 6
+  if (count === 3) return 10
+  return Math.max(Number(fallbackCapacity) || 4, count * 4)
+}
+
+function getOpenTableSessionByIdRaw(sessionId) {
+  return state.tableSessions.find((session) => session.id === sessionId && session.closedAt == null) || null
+}
+
+function getActiveTableGroupByTableIdRaw(tableId) {
+  return (state.tableGroups || []).find((group) => group.active !== false && Array.isArray(group.tableIds) && group.tableIds.includes(tableId)) || null
+}
+
+function getGroupedTablesRaw(group) {
+  if (!group || !Array.isArray(group.tableIds)) return []
+  return group.tableIds
+    .map((tableId) => state.tables.find((table) => table.id === tableId))
+    .filter(Boolean)
+}
+
+function getOperationalContextByTableIdRaw(tableId) {
+  const requestedTable = state.tables.find((table) => table.id === tableId) || null
+  const group = getActiveTableGroupByTableIdRaw(tableId)
+  const operationalTable = group
+    ? state.tables.find((table) => table.id === group.mainTableId) || requestedTable
+    : requestedTable
+
+  return {
+    requestedTable,
+    group,
+    operationalTable,
+  }
+}
+
+function getActiveGuestSessionsByTableSessionIdRaw(tableSessionId) {
+  return (state.tableGuestSessions || []).filter(
+    (guestSession) => guestSession.tableSessionId === tableSessionId && guestSession.status === TABLE_GUEST_STATUS.ACTIVE && guestSession.closedAt == null,
+  )
+}
+
+function getActiveQrGuestSessionsByTableSessionIdRaw(tableSessionId) {
+  return getActiveGuestSessionsByTableSessionIdRaw(tableSessionId).filter(
+    (guestSession) => guestSession.source === TABLE_GUEST_SOURCE.QR,
+  )
+}
+
+function getManualReservedGuestCountRaw(session) {
+  if (!session) return 0
+  const activeQrGuests = getActiveQrGuestSessionsByTableSessionIdRaw(session.id)
+  return Math.max(0, Number(session.guestsActive || 0) - activeQrGuests.length)
+}
+
+function findNextQrGuestNumber(session) {
+  if (!session) return 1
+
+  const qrGuests = getActiveQrGuestSessionsByTableSessionIdRaw(session.id)
+  const used = new Set(qrGuests.map((guestSession) => Number(guestSession.guestNumber || 0)).filter((value) => value > 0))
+  const manualReserved = getManualReservedGuestCountRaw(session)
+
+  for (let guestNumber = manualReserved + 1; guestNumber <= 99; guestNumber += 1) {
+    if (!used.has(guestNumber)) return guestNumber
+  }
+
+  return Math.max(manualReserved, ...Array.from(used.values(), (value) => Number(value) || 0)) + 1
+}
+
+function getEffectiveCapacityForTableRaw(table) {
+  if (!table) return 0
+  const group = getActiveTableGroupByTableIdRaw(table.id)
+  if (!group) return Number(table.capacity || 0)
+  return Number(group.effectiveCapacity || deriveGroupedCapacity(group.tableIds?.length, table.capacity))
+}
+
+function getActiveSessionByTableRecordRaw(table) {
+  if (!table) return null
+  const group = getActiveTableGroupByTableIdRaw(table.id)
+  if (group?.activeTableSessionId) {
+    return getOpenTableSessionByIdRaw(group.activeTableSessionId)
+  }
+  if (!table.activeSessionId) return null
+  return getOpenTableSessionByIdRaw(table.activeSessionId)
+}
+
+function mapTableGroupMeta(group) {
+  if (!group) return null
+  const groupedTables = getGroupedTablesRaw(group)
+
+  return {
+    id: group.id,
+    mainTableId: group.mainTableId,
+    tableIds: [...group.tableIds],
+    active: group.active !== false,
+    effectiveCapacity: Number(group.effectiveCapacity || deriveGroupedCapacity(group.tableIds?.length, groupedTables[0]?.capacity)),
+    activeTableSessionId: group.activeTableSessionId || null,
+    tables: groupedTables.map((table) => ({
+      id: table.id,
+      number: table.number,
+      salonId: table.salonId,
+    })),
+  }
+}
+
 function tablePublicMeta(table) {
   const salon = state.salons.find((row) => row.id === table.salonId) || null
+  const group = getActiveTableGroupByTableIdRaw(table.id)
+  const activeSession = getActiveSessionByTableRecordRaw(table)
   return {
     ...clone(table),
     salon,
+    status: activeSession ? TABLE_STATUS.OCCUPIED : table.status,
+    activeSessionId: activeSession?.id || null,
+    activeSession,
+    effectiveCapacity: getEffectiveCapacityForTableRaw(table),
+    operationalTableId: group?.mainTableId || table.id,
+    isGroupMain: !group || group.mainTableId === table.id,
+    tableGroup: mapTableGroupMeta(group),
   }
 }
 
@@ -500,6 +622,8 @@ function ensureBusinessState() {
   if (!Array.isArray(state.menuSections)) state.menuSections = []
   if (!Array.isArray(state.menuCategories)) state.menuCategories = []
   if (!Array.isArray(state.menuProducts)) state.menuProducts = []
+  if (!Array.isArray(state.tableGuestSessions)) state.tableGuestSessions = []
+  if (!Array.isArray(state.tableGroups)) state.tableGroups = []
   if (!Array.isArray(state.bills)) state.bills = []
   if (!Array.isArray(state.cashTransactions)) state.cashTransactions = []
   if (!Array.isArray(state.financeAccounts)) state.financeAccounts = defaultFinanceAccounts()
@@ -572,8 +696,76 @@ function collectExistingBillLineKeys() {
   return keys
 }
 
+function releaseTableSessionResources(session) {
+  if (!session) return
+
+  const table = state.tables.find((item) => item.id === session.tableId)
+  if (table) {
+    table.activeSessionId = null
+    table.status = TABLE_STATUS.FREE
+  }
+
+  const group = getActiveTableGroupByTableIdRaw(session.tableId)
+  if (group && group.activeTableSessionId === session.id) {
+    group.activeTableSessionId = null
+    group.updatedAt = nowIso()
+    for (const groupedTable of getGroupedTablesRaw(group)) {
+      groupedTable.status = TABLE_STATUS.FREE
+      if (groupedTable.id === group.mainTableId) {
+        groupedTable.activeSessionId = null
+      }
+    }
+  }
+}
+
+function syncGuestSessionsAfterBills(tableSessionId) {
+  if (!tableSessionId) return
+
+  const session = asArray(state.tableSessions).find((item) => item.id === tableSessionId)
+  if (!session) return
+
+  const guestSessions = getActiveQrGuestSessionsByTableSessionIdRaw(tableSessionId)
+
+  for (const guestSession of guestSessions) {
+    const relatedBills = asArray(state.bills).filter(
+      (bill) =>
+        bill.tableSessionId === tableSessionId &&
+        (bill.guestSessionId === guestSession.id || (!bill.guestSessionId && bill.guestNumber === guestSession.guestNumber)),
+    )
+
+    const hasOpenBill = relatedBills.some(
+      (bill) => bill.status === BILL_STATUS.OPEN || bill.status === BILL_STATUS.PARTIALLY_PAID,
+    )
+    const hasAnyBill = relatedBills.length > 0
+
+    if (hasAnyBill && !hasOpenBill) {
+      for (const order of asArray(state.orders)) {
+        if (order.guestSessionId === guestSession.id && order.status === ORDER_STATUS.DELIVERED) {
+          order.status = ORDER_STATUS.CLOSED
+          order.closedAt = order.closedAt || nowIso()
+        }
+      }
+    }
+
+    const hasOpenQrOrders = asArray(state.orders).some(
+      (order) =>
+        order.guestSessionId === guestSession.id &&
+        order.status !== ORDER_STATUS.CLOSED &&
+        order.status !== ORDER_STATUS.CANCELLED,
+    )
+
+    if (!hasOpenBill && !hasOpenQrOrders) {
+      guestSession.status = TABLE_GUEST_STATUS.CLOSED
+      guestSession.closedAt = guestSession.closedAt || nowIso()
+      session.guestsActive = Math.max(0, Number(session.guestsActive || 0) - 1)
+    }
+  }
+}
+
 function syncOrdersAfterBills(tableSessionId) {
   if (!tableSessionId) return
+
+  syncGuestSessionsAfterBills(tableSessionId)
 
   const sessionBills = asArray(state.bills).filter((bill) => bill.tableSessionId === tableSessionId)
   const hasOpen = sessionBills.some((bill) => bill.status === BILL_STATUS.OPEN || bill.status === BILL_STATUS.PARTIALLY_PAID)
@@ -595,11 +787,11 @@ function syncOrdersAfterBills(tableSessionId) {
 
   if (!hasPendingOrders) {
     session.closedAt = session.closedAt || nowIso()
-    const table = state.tables.find((item) => item.id === session.tableId)
-    if (table) {
-      table.activeSessionId = null
-      table.status = TABLE_STATUS.FREE
+    for (const guestSession of getActiveGuestSessionsByTableSessionIdRaw(tableSessionId)) {
+      guestSession.status = TABLE_GUEST_STATUS.CLOSED
+      guestSession.closedAt = guestSession.closedAt || nowIso()
     }
+    releaseTableSessionResources(session)
   }
 }
 
@@ -617,6 +809,7 @@ function mapMenuProductToCatalogItem(product) {
     isMenu: true,
     variants: asArray(product.options).map((option) => option.name).filter(Boolean),
     imageUrl: product.imageUrl || '',
+    isPublic: product.isPublic !== false,
     active: product.isActive && product.status === 'AVAILABLE' && Number(product.quantity) > 0,
     days: [],
   }
@@ -743,6 +936,14 @@ export const db = {
     syncCatalogState()
     const selectedDate = date || dateOnly()
     return clone(state.catalog.filter((item) => isCatalogAvailableOnDate(item, selectedDate)))
+  },
+
+  getPublicCatalogMenus(date) {
+    syncCatalogState()
+    const selectedDate = date || dateOnly()
+    return clone(
+      state.catalog.filter((item) => item.isPublic !== false && isCatalogAvailableOnDate(item, selectedDate)),
+    )
   },
 
   createCatalogItem(payload) {
@@ -884,7 +1085,7 @@ export const db = {
         if (aOrder !== bOrder) return aOrder - bOrder
         return a.number - b.number
       })
-      .map((table) => clone(table))
+      .map((table) => tablePublicMeta(table))
   },
 
   listTablesAdmin({ salonId, active, status, qrStatus } = {}) {
@@ -923,6 +1124,51 @@ export const db = {
     if (!salon?.active) return null
 
     return clone(table)
+  },
+
+  getActiveTableGroupByTableId(tableId) {
+    const group = getActiveTableGroupByTableIdRaw(tableId)
+    return group ? clone(mapTableGroupMeta(group)) : null
+  },
+
+  getEffectiveCapacityByTableId(tableId) {
+    const table = this.getTableById(tableId)
+    if (!table) return 0
+    return getEffectiveCapacityForTableRaw(table)
+  },
+
+  getPublicQrContext(tableId, date) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    if (!context.requestedTable || !context.operationalTable) return null
+
+    const salon = this.getSalonById(context.operationalTable.salonId)
+    const activeSession = getActiveSessionByTableRecordRaw(context.operationalTable)
+    const effectiveCapacity = getEffectiveCapacityForTableRaw(context.operationalTable)
+    const occupiedGuests = Number(activeSession?.guestsActive || 0)
+
+    return {
+      restaurant: {
+        name: state.restaurant?.name || defaultRestaurantSettings().name,
+      },
+      table: tablePublicMeta(context.requestedTable),
+      operationalTable: tablePublicMeta(context.operationalTable),
+      salon,
+      sessionOpen: Boolean(activeSession),
+      tableSessionId: activeSession?.id || null,
+      effectiveCapacity,
+      occupiedGuests,
+      hasAvailableSeats: occupiedGuests < effectiveCapacity,
+      groupedTables: context.group
+        ? getGroupedTablesRaw(context.group).map((table) => ({
+          id: table.id,
+          number: table.number,
+        }))
+        : [],
+      menu: {
+        date: date || dateOnly(),
+        items: this.getPublicCatalogMenus(date),
+      },
+    }
   },
 
   ensureTableQrToken(tableId) {
@@ -1017,6 +1263,7 @@ export const db = {
   updateTableRecord(tableId, payload) {
     const table = this.getTableById(tableId)
     if (!table) throw new Error('Mesa no existe')
+    const tableGroup = getActiveTableGroupByTableIdRaw(table.id)
 
     const patch = payload || {}
     const nextSalonId = patch.salonId != null ? String(patch.salonId) : table.salonId
@@ -1033,6 +1280,10 @@ export const db = {
 
     const duplicated = state.tables.find((row) => row.id !== table.id && row.salonId === nextSalonId && row.number === nextNumber)
     if (duplicated) throw new Error('Ya existe una mesa con ese numero en el salon')
+
+    if (tableGroup && (patch.capacity != null || patch.active === false)) {
+      throw new Error('No se puede cambiar aforo o desactivar una mesa que pertenece a una union activa')
+    }
 
     if (table.activeSessionId && !nextActive) {
       throw new Error('No se puede desactivar una mesa con sesion activa')
@@ -1066,6 +1317,115 @@ export const db = {
     }
 
     return tablePublicMeta(table)
+  },
+
+  listTableGroups({ active } = {}) {
+    ensureBusinessState()
+    let rows = [...state.tableGroups]
+    if (typeof active === 'boolean') {
+      rows = rows.filter((group) => (group.active !== false) === active)
+    }
+    return clone(rows.map((group) => mapTableGroupMeta(group)))
+  },
+
+  getTableGroupById(groupId) {
+    ensureBusinessState()
+    const group = state.tableGroups.find((row) => row.id === groupId)
+    return group ? clone(mapTableGroupMeta(group)) : null
+  },
+
+  createTableGroup({ mainTableId, tableIds }) {
+    ensureBusinessState()
+    const requestedIds = Array.from(new Set([String(mainTableId || '').trim(), ...asArray(tableIds).map((id) => String(id).trim())].filter(Boolean)))
+
+    if (requestedIds.length < 2) throw new Error('Debes seleccionar al menos 2 mesas para unir')
+    if (requestedIds.length > 3) throw new Error('Solo se permite unir hasta 3 mesas en esta fase')
+
+    const tables = requestedIds.map((tableId) => this.getTableById(tableId))
+    if (tables.some((table) => !table)) throw new Error('Una de las mesas seleccionadas no existe')
+    if (tables.some((table) => !table.active)) throw new Error('No se puede unir una mesa inactiva')
+
+    const salonId = tables[0].salonId
+    if (tables.some((table) => table.salonId !== salonId)) {
+      throw new Error('Solo puedes unir mesas del mismo salon')
+    }
+
+    for (const table of tables) {
+      if (getActiveTableGroupByTableIdRaw(table.id)) {
+        throw new Error('Una de las mesas ya pertenece a otra union activa')
+      }
+      if (getActiveSessionByTableRecordRaw(table)) {
+        throw new Error('No puedes unir mesas que ya tienen sesion activa')
+      }
+    }
+
+    const mainId = requestedIds.includes(mainTableId) ? mainTableId : requestedIds[0]
+    const group = {
+      id: randomUUID(),
+      salonId,
+      tableIds: requestedIds,
+      mainTableId: mainId,
+      effectiveCapacity: deriveGroupedCapacity(requestedIds.length, tables[0]?.capacity),
+      activeTableSessionId: null,
+      active: true,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    }
+
+    state.tableGroups.push(group)
+    return clone(mapTableGroupMeta(group))
+  },
+
+  updateTableGroup(groupId, payload) {
+    ensureBusinessState()
+    const group = state.tableGroups.find((row) => row.id === groupId)
+    if (!group) throw new Error('La union de mesas no existe')
+
+    if (group.activeTableSessionId) {
+      throw new Error('No puedes modificar una union con sesion activa')
+    }
+
+    const requestedIds = Array.from(new Set(asArray(payload?.tableIds).map((id) => String(id).trim()).filter(Boolean)))
+    if (requestedIds.length < 2) throw new Error('La union debe conservar al menos 2 mesas')
+    if (requestedIds.length > 3) throw new Error('Solo se permite unir hasta 3 mesas')
+
+    const tables = requestedIds.map((tableId) => this.getTableById(tableId))
+    if (tables.some((table) => !table)) throw new Error('Una de las mesas seleccionadas no existe')
+    if (tables.some((table) => !table.active)) throw new Error('No se puede usar una mesa inactiva en la union')
+
+    const salonId = tables[0].salonId
+    if (tables.some((table) => table.salonId !== salonId)) {
+      throw new Error('Solo puedes unir mesas del mismo salon')
+    }
+
+    for (const table of tables) {
+      const currentGroup = getActiveTableGroupByTableIdRaw(table.id)
+      if (currentGroup && currentGroup.id !== group.id) {
+        throw new Error('Una de las mesas ya pertenece a otra union activa')
+      }
+    }
+
+    const nextMainTableId = requestedIds.includes(payload?.mainTableId) ? payload.mainTableId : requestedIds[0]
+
+    group.tableIds = requestedIds
+    group.mainTableId = nextMainTableId
+    group.salonId = salonId
+    group.effectiveCapacity = deriveGroupedCapacity(requestedIds.length, tables[0]?.capacity)
+    group.updatedAt = nowIso()
+
+    return clone(mapTableGroupMeta(group))
+  },
+
+  deleteTableGroup(groupId) {
+    ensureBusinessState()
+    const groupIndex = state.tableGroups.findIndex((row) => row.id === groupId)
+    if (groupIndex < 0) throw new Error('La union de mesas no existe')
+    if (state.tableGroups[groupIndex].activeTableSessionId) {
+      throw new Error('No puedes separar mesas con sesion activa')
+    }
+
+    const [removed] = state.tableGroups.splice(groupIndex, 1)
+    return clone(mapTableGroupMeta(removed))
   },
 
   getQrSummary() {
@@ -1166,24 +1526,61 @@ export const db = {
 
   getActiveSessionByTableId(tableId) {
     const table = this.getTableById(tableId)
-    if (!table?.activeSessionId) return null
-    return state.tableSessions.find((session) => session.id === table.activeSessionId && session.closedAt === null) || null
+    return table ? getActiveSessionByTableRecordRaw(table) : null
   },
 
-  openTableSession(tableId, guests, userId) {
-    const table = this.getTableById(tableId)
+  openAutoQrTableSession(tableId) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const table = context.operationalTable
     if (!table) throw new Error('Mesa no existe')
     if (!table.active) throw new Error('Mesa inactiva')
     const salon = this.getSalonById(table.salonId)
     if (!salon?.active) throw new Error('El salon de la mesa esta inactivo')
-    if (table.activeSessionId) throw new Error('La mesa ya tiene una sesion activa')
-    if (!Number.isInteger(guests) || guests < 1 || guests > table.capacity) {
+
+    const activeSession = getActiveSessionByTableRecordRaw(table)
+    if (activeSession) return clone(activeSession)
+
+    const session = {
+      id: randomUUID(),
+      tableId: table.id,
+      guestsActive: 0,
+      createdByUserId: 'qr-client',
+      createdAt: nowIso(),
+      closedAt: null,
+      orderIds: [],
+    }
+
+    state.tableSessions.push(session)
+    table.status = TABLE_STATUS.OCCUPIED
+    table.activeSessionId = session.id
+
+    if (context.group) {
+      context.group.activeTableSessionId = session.id
+      context.group.updatedAt = nowIso()
+      for (const groupedTable of getGroupedTablesRaw(context.group)) {
+        groupedTable.status = TABLE_STATUS.OCCUPIED
+      }
+    }
+
+    return clone(session)
+  },
+
+  openTableSession(tableId, guests, userId) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const table = context.operationalTable
+    if (!table) throw new Error('Mesa no existe')
+    if (!table.active) throw new Error('Mesa inactiva')
+    const salon = this.getSalonById(table.salonId)
+    if (!salon?.active) throw new Error('El salon de la mesa esta inactivo')
+    if (getActiveSessionByTableRecordRaw(table)) throw new Error('La mesa ya tiene una sesion activa')
+    const effectiveCapacity = getEffectiveCapacityForTableRaw(table)
+    if (!Number.isInteger(guests) || guests < 1 || guests > effectiveCapacity) {
       throw new Error('Cantidad de comensales invalida para la capacidad de la mesa')
     }
 
     const session = {
       id: randomUUID(),
-      tableId,
+      tableId: table.id,
       guestsActive: guests,
       createdByUserId: userId,
       createdAt: nowIso(),
@@ -1195,20 +1592,154 @@ export const db = {
     table.activeSessionId = session.id
     state.tableSessions.push(session)
 
+    if (context.group) {
+      context.group.activeTableSessionId = session.id
+      context.group.updatedAt = nowIso()
+      for (const groupedTable of getGroupedTablesRaw(context.group)) {
+        groupedTable.status = TABLE_STATUS.OCCUPIED
+      }
+    }
+
     return clone(session)
   },
 
   updateTableSessionGuests(tableId, guests) {
-    const table = this.getTableById(tableId)
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const table = context.operationalTable
     if (!table) throw new Error('Mesa no existe')
     if (!table.active) throw new Error('Mesa inactiva')
     const activeSession = this.getActiveSessionByTableId(tableId)
     if (!activeSession) throw new Error('La mesa no tiene sesion activa')
-    if (!Number.isInteger(guests) || guests < 1 || guests > table.capacity) {
+    const effectiveCapacity = getEffectiveCapacityForTableRaw(table)
+    if (!Number.isInteger(guests) || guests < 1 || guests > effectiveCapacity) {
       throw new Error('Cantidad de comensales invalida para la capacidad de la mesa')
     }
     activeSession.guestsActive = guests
     return clone(activeSession)
+  },
+
+  listTableGuestSessions({ tableSessionId, tableId, status } = {}) {
+    ensureBusinessState()
+    let rows = [...state.tableGuestSessions]
+    if (tableSessionId) rows = rows.filter((row) => row.tableSessionId === tableSessionId)
+    if (tableId) rows = rows.filter((row) => row.tableId === tableId)
+    if (status) rows = rows.filter((row) => row.status === status)
+    rows.sort((a, b) => Number(a.guestNumber || 0) - Number(b.guestNumber || 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    return clone(rows)
+  },
+
+  getTableGuestSessionById(guestSessionId) {
+    return state.tableGuestSessions.find((row) => row.id === guestSessionId) || null
+  },
+
+  getTableGuestSessionByToken(guestToken) {
+    const token = String(guestToken || '').trim()
+    if (!token) return null
+    return state.tableGuestSessions.find((row) => row.guestToken === token) || null
+  },
+
+  joinQrGuestSession(tableId, guestToken) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const requestedTable = context.requestedTable
+    const operationalTable = context.operationalTable
+    if (!requestedTable || !operationalTable) throw new Error('Mesa no existe')
+    if (!requestedTable.active || !operationalTable.active) throw new Error('Mesa inactiva')
+
+    const salon = this.getSalonById(operationalTable.salonId)
+    if (!salon?.active) throw new Error('El salon de la mesa esta inactivo')
+
+    let tableSession = getActiveSessionByTableRecordRaw(operationalTable)
+    if (!tableSession) {
+      tableSession = state.tableSessions.find((session) => session.id === this.openAutoQrTableSession(tableId).id) || null
+    }
+
+    const normalizedGuestToken = String(guestToken || '').trim()
+    if (normalizedGuestToken) {
+      const existing = this.getTableGuestSessionByToken(normalizedGuestToken)
+      if (
+        existing &&
+        existing.tableId === operationalTable.id &&
+        existing.tableSessionId === tableSession.id &&
+        existing.status === TABLE_GUEST_STATUS.ACTIVE &&
+        existing.closedAt == null
+      ) {
+        return {
+          created: false,
+          tableSession: clone(tableSession),
+          guestSession: clone(existing),
+          effectiveCapacity: getEffectiveCapacityForTableRaw(operationalTable),
+          occupiedGuests: Number(tableSession.guestsActive || 0),
+        }
+      }
+    }
+
+    const effectiveCapacity = getEffectiveCapacityForTableRaw(operationalTable)
+    if (Number(tableSession.guestsActive || 0) >= effectiveCapacity) {
+      const error = new Error('La mesa alcanzo su capacidad actual. Pide al mozo unir mesas o registrar tu pedido desde POS.')
+      error.status = 409
+      throw error
+    }
+
+    const guestSession = {
+      id: randomUUID(),
+      tableSessionId: tableSession.id,
+      tableId: operationalTable.id,
+      guestNumber: findNextQrGuestNumber(tableSession),
+      source: TABLE_GUEST_SOURCE.QR,
+      status: TABLE_GUEST_STATUS.ACTIVE,
+      guestToken: randomUUID(),
+      createdAt: nowIso(),
+      closedAt: null,
+    }
+
+    state.tableGuestSessions.push(guestSession)
+    tableSession.guestsActive = Number(tableSession.guestsActive || 0) + 1
+
+    return {
+      created: true,
+      tableSession: clone(tableSession),
+      guestSession: clone(guestSession),
+      effectiveCapacity,
+      occupiedGuests: Number(tableSession.guestsActive || 0),
+    }
+  },
+
+  getQrGuestContext(tableId, guestToken) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const requestedTable = context.requestedTable
+    const operationalTable = context.operationalTable
+    if (!requestedTable || !operationalTable) return null
+
+    const tableSession = getActiveSessionByTableRecordRaw(operationalTable)
+    const normalizedGuestToken = String(guestToken || '').trim()
+    const guestSession = normalizedGuestToken ? this.getTableGuestSessionByToken(normalizedGuestToken) : null
+
+    if (
+      !tableSession ||
+      !guestSession ||
+      guestSession.tableId !== operationalTable.id ||
+      guestSession.tableSessionId !== tableSession.id ||
+      guestSession.status !== TABLE_GUEST_STATUS.ACTIVE ||
+      guestSession.closedAt != null
+    ) {
+      return {
+        tableSession: tableSession ? clone(tableSession) : null,
+        guestSession: null,
+        activeOrders: [],
+      }
+    }
+
+    const activeOrders = state.orders
+      .filter((order) => order.guestSessionId === guestSession.id)
+      .filter((order) => order.status !== ORDER_STATUS.CLOSED && order.status !== ORDER_STATUS.CANCELLED)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map((order) => clone(order))
+
+    return {
+      tableSession: clone(tableSession),
+      guestSession: clone(guestSession),
+      activeOrders,
+    }
   },
 
   getTableSessionById(sessionId) {
@@ -1260,6 +1791,27 @@ export const db = {
 
   getOrderById(orderId) {
     return state.orders.find((order) => order.id === orderId)
+  },
+
+  getEditableQrOrderByGuestSession(guestSessionId) {
+    if (!guestSessionId) return null
+    return state.orders.find(
+      (order) =>
+        order.source === ORDER_SOURCE.QR &&
+        order.guestSessionId === guestSessionId &&
+        (order.status === ORDER_STATUS.PENDING_WAITER_APPROVAL || order.status === ORDER_STATUS.APPROVED),
+    ) || null
+  },
+
+  createOrGetQrOrder(tableId, guestSessionId) {
+    const existing = this.getEditableQrOrderByGuestSession(guestSessionId)
+    if (existing) return clone(existing)
+    return this.createOrder({
+      tableId,
+      source: ORDER_SOURCE.QR,
+      createdByUserId: 'qr-client',
+      guestSessionId,
+    })
   },
 
   updateOrderRecord(orderId, payload, actorRole) {
@@ -1368,8 +1920,9 @@ export const db = {
     }
   },
 
-  createOrder({ tableId, source, createdByUserId }) {
-    const table = this.getTableById(tableId)
+  createOrder({ tableId, source, createdByUserId, guestSessionId = null }) {
+    const context = getOperationalContextByTableIdRaw(tableId)
+    const table = context.operationalTable
     if (!table) throw new Error('Mesa no existe')
     if (!table.active) throw new Error('Mesa inactiva')
     const salon = this.getSalonById(table.salonId)
@@ -1381,9 +1934,25 @@ export const db = {
       throw error
     }
 
+    let guestSession = null
+    if (guestSessionId) {
+      guestSession = this.getTableGuestSessionById(guestSessionId)
+      if (!guestSession) throw new Error('La persona QR no existe')
+      if (guestSession.tableSessionId !== activeSession.id || guestSession.tableId !== table.id) {
+        const error = new Error('La persona QR no corresponde a la sesion activa de la mesa')
+        error.status = 403
+        throw error
+      }
+      if (guestSession.status !== TABLE_GUEST_STATUS.ACTIVE || guestSession.closedAt != null) {
+        const error = new Error('La persona QR ya no esta activa')
+        error.status = 409
+        throw error
+      }
+    }
+
     const order = {
       id: randomUUID(),
-      tableId,
+      tableId: table.id,
       tableSessionId: activeSession.id,
       createdByUserId,
       source,
@@ -1391,6 +1960,8 @@ export const db = {
       createdAt: nowIso(),
       closedAt: null,
       approvedByUserId: null,
+      guestSessionId: guestSession?.id || null,
+      guestNumber: guestSession?.guestNumber || null,
       items: [],
       payments: [],
       splitMode: SPLIT_MODE.TABLE_TOTAL,
@@ -1410,8 +1981,15 @@ export const db = {
   addItemsToOrder(orderId, itemsPayload) {
     const order = this.getOrderById(orderId)
     if (!order) throw new Error('Pedido no existe')
-    if (order.status === ORDER_STATUS.CLOSED || order.status === ORDER_STATUS.CANCELLED) {
-      throw new Error('No se puede modificar un pedido cerrado o cancelado')
+    if (
+      order.status === ORDER_STATUS.CLOSED ||
+      order.status === ORDER_STATUS.CANCELLED ||
+      order.status === ORDER_STATUS.SENT_TO_KITCHEN ||
+      order.status === ORDER_STATUS.PREPARING ||
+      order.status === ORDER_STATUS.READY ||
+      order.status === ORDER_STATUS.DELIVERED
+    ) {
+      throw new Error('No se puede modificar un pedido que ya fue enviado o cerrado')
     }
 
     const items = Array.isArray(itemsPayload) ? itemsPayload : []
@@ -1432,7 +2010,8 @@ export const db = {
         unitPrice: payload.unitPrice != null ? Number(payload.unitPrice) : Number(product.basePrice),
         variant: payload.variant || 'normal',
         notes: payload.notes || '',
-        guestNumber: payload.guestNumber || null,
+        guestNumber: order.guestNumber || payload.guestNumber || null,
+        guestSessionId: order.guestSessionId || payload.guestSessionId || null,
         serviceMode: payload.serviceMode || SERVICE_MODE.DINE_IN,
         isMenu: Boolean(product.isMenu),
         extras: [],
@@ -2574,12 +3153,16 @@ db.generateBills = function generateBills({ tableSessionId, tableId } = {}) {
       if (billedKeys.has(lineKey)) continue
 
       const guestNumber = Number(item.guestNumber) > 0 ? Number(item.guestNumber) : 0
-      const groupKey = String(order.tableSessionId) + ':' + String(guestNumber)
+      const guestSessionId = String(item.guestSessionId || order.guestSessionId || '').trim() || null
+      const groupKey = guestSessionId
+        ? 'guest:' + guestSessionId
+        : String(order.tableSessionId) + ':' + String(guestNumber)
 
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, {
           tableId: order.tableId,
           tableSessionId: order.tableSessionId,
+          guestSessionId,
           guestNumber,
           lines: [],
           orderIds: new Set(),
@@ -2616,7 +3199,7 @@ db.generateBills = function generateBills({ tableSessionId, tableId } = {}) {
     const target = state.bills.find(
       (bill) =>
         bill.tableSessionId === group.tableSessionId &&
-        bill.guestNumber === group.guestNumber &&
+        (group.guestSessionId ? bill.guestSessionId === group.guestSessionId : bill.guestNumber === group.guestNumber) &&
         (bill.status === BILL_STATUS.OPEN || bill.status === BILL_STATUS.PARTIALLY_PAID),
     )
 
@@ -2633,6 +3216,7 @@ db.generateBills = function generateBills({ tableSessionId, tableId } = {}) {
       id: randomUUID(),
       tableId: group.tableId,
       tableSessionId: group.tableSessionId,
+      guestSessionId: group.guestSessionId,
       guestNumber: group.guestNumber,
       label: billLabelForGuest(group.guestNumber),
       status: BILL_STATUS.OPEN,

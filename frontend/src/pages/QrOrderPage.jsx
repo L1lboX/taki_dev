@@ -129,7 +129,8 @@ function buildMenuCollections(items) {
     CEVICHES: mains.filter((item) => productCardGroup(item) === 'CEVICHES'),
   }
 
-  const featured = platoDelDia[0] || menuDelDia[0] || mains[0] || null
+  const explicitFeatured = activeItems.find((item) => item.isFeatured === true) || null
+  const featured = explicitFeatured || platoDelDia[0] || menuDelDia[0] || mains[0] || null
 
   return {
     featured,
@@ -409,7 +410,6 @@ export default function QrOrderPage() {
                 <div className="qr-v2-section-head">
                   <div>
                     <h3>Menu del dia</h3>
-                    <p>Los platos que mas salen hoy y conviene pedir rapido.</p>
                   </div>
                 </div>
 
@@ -444,7 +444,6 @@ export default function QrOrderPage() {
                 <div className="qr-v2-section-head">
                   <div>
                     <h3>Carta completa</h3>
-                    <p>Menu, principales, carta y ceviches segun lo que quieras comer hoy.</p>
                   </div>
                 </div>
 

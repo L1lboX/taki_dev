@@ -14,8 +14,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -73,6 +75,7 @@ const INITIAL_FORM = {
   status: 'AVAILABLE',
   isActive: 'true',
   isPublic: 'true',
+  isFeatured: false,
   imageUrl: '',
   optionsText: '',
 }
@@ -239,7 +242,7 @@ export default function MenuProductsPage() {
       { label: 'Total', value: rows.length, meta: 'Productos registrados' },
       { label: 'En carta', value: rows.filter((row) => row.isActive !== false).length, meta: 'Mostrados en operacion' },
       { label: 'Publicos QR', value: rows.filter((row) => row.isPublic !== false).length, meta: 'Visibles para cliente' },
-      { label: 'Agotados', value: rows.filter((row) => row.status === 'OUT_OF_STOCK').length, meta: 'Necesitan reposicion' },
+      { label: 'Destacado', value: rows.filter((row) => row.isFeatured === true).length, meta: 'Plato principal del QR' },
     ],
     [rows],
   )
@@ -272,6 +275,7 @@ export default function MenuProductsPage() {
       status: product.status || 'AVAILABLE',
       isActive: String(product.isActive !== false),
       isPublic: String(product.isPublic !== false),
+      isFeatured: product.isFeatured === true,
       imageUrl: product.imageUrl || '',
       optionsText: optionsToText(product.options || []),
     })
@@ -316,6 +320,7 @@ export default function MenuProductsPage() {
       status: form.status,
       isActive: form.isActive === 'true',
       isPublic: form.isPublic === 'true',
+      isFeatured: form.isFeatured === true,
       imageUrl: String(form.imageUrl || '').trim(),
       options: parseOptions(form.optionsText),
     }
@@ -468,6 +473,7 @@ export default function MenuProductsPage() {
                   <TableCell>Disponibilidad</TableCell>
                   <TableCell>Carta</TableCell>
                   <TableCell>QR</TableCell>
+                  <TableCell>Destacado</TableCell>
                   <TableCell>Area</TableCell>
                   <TableCell align="right">Acciones</TableCell>
                 </TableRow>
@@ -539,6 +545,22 @@ export default function MenuProductsPage() {
                           fontWeight: 700,
                         }}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {row.isFeatured ? (
+                        <Chip
+                          label="Destacado"
+                          size="small"
+                          sx={{
+                            borderRadius: '8px',
+                            bgcolor: '#fff3d4',
+                            color: '#9a5b16',
+                            fontWeight: 800,
+                          }}
+                        />
+                      ) : (
+                        '-'
+                      )}
                     </TableCell>
                     <TableCell>{row.productionAreaId || 'COCINA'}</TableCell>
                     <TableCell align="right">
@@ -712,6 +734,36 @@ export default function MenuProductsPage() {
                 <MenuItem value="false">Oculto</MenuItem>
               </TextField>
             </Stack>
+
+            <Box
+              sx={{
+                px: 1.5,
+                py: 1.25,
+                borderRadius: '10px',
+                border: `1px solid ${alpha(menuAdminPalette.accent, 0.14)}`,
+                backgroundColor: alpha(menuAdminPalette.accent, 0.04),
+              }}
+            >
+              <FormControlLabel
+                control={(
+                  <Switch
+                    checked={Boolean(form.isFeatured)}
+                    onChange={(event) => setForm((prev) => ({ ...prev, isFeatured: event.target.checked }))}
+                  />
+                )}
+                label={(
+                  <Box>
+                    <Typography sx={{ color: menuAdminPalette.ink, fontSize: 14.5, fontWeight: 700 }}>
+                      Destacar en la carta QR
+                    </Typography>
+                    <Typography sx={{ color: menuAdminPalette.muted, fontSize: 12.5, lineHeight: 1.55 }}>
+                      Solo puede existir un plato destacado a la vez. Este se mostrara en el bloque principal del QR.
+                    </Typography>
+                  </Box>
+                )}
+                sx={{ alignItems: 'flex-start', m: 0 }}
+              />
+            </Box>
 
             <TextField
               fullWidth

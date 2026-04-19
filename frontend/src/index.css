@@ -4218,7 +4218,7 @@ textarea:focus {
 
 .qr-customer-v2 .qr-v2-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 138px;
+  grid-template-columns: minmax(0, 1fr) 118px;
   gap: 14px;
   background: linear-gradient(135deg, #711b1e 0%, #521317 100%);
   color: #fff7ef;
@@ -4239,14 +4239,15 @@ textarea:focus {
 
 .qr-customer-v2 .qr-v2-hero-title {
   margin: 0;
-  font-size: clamp(2rem, 7vw, 3rem);
-  line-height: 0.92;
+  font-size: clamp(1.9rem, 6vw, 2.8rem);
+  line-height: 0.94;
   text-transform: uppercase;
 }
 
 .qr-customer-v2 .qr-v2-hero-meta {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
   color: #ffd45f;
@@ -4282,13 +4283,14 @@ textarea:focus {
 
 .qr-customer-v2 .qr-v2-hero-media,
 .qr-customer-v2 .qr-v2-hero-fallback {
-  width: 138px;
-  height: 138px;
+  width: 118px;
+  height: 118px;
   border-radius: 999px;
   overflow: hidden;
-  align-self: center;
+  align-self: start;
   justify-self: end;
   background: rgba(255, 255, 255, 0.14);
+  margin-top: 4px;
 }
 
 .qr-customer-v2 .qr-v2-hero-media img {
@@ -4336,12 +4338,6 @@ textarea:focus {
   font-size: 1.55rem;
   line-height: 1;
   color: #2f1a14;
-}
-
-.qr-customer-v2 .qr-v2-section-head p {
-  margin: 6px 0 0;
-  font-size: 0.95rem;
-  color: #77574b;
 }
 
 .qr-customer-v2 .qr-v2-menu-strip {
@@ -4626,7 +4622,7 @@ textarea:focus {
   object-fit: cover;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 360px) {
   .qr-customer-v2 .qr-v2-shell {
     width: 100%;
     padding-inline: 10px;

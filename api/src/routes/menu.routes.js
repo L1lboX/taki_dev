@@ -56,6 +56,7 @@ const productCreateSchema = z.object({
   status: z.enum(['AVAILABLE', 'OUT_OF_STOCK', 'OUT_OF_SEASON']).optional().default('AVAILABLE'),
   isActive: z.boolean().optional().default(true),
   isPublic: z.boolean().optional().default(true),
+  isFeatured: z.boolean().optional().default(false),
   imageUrl: z.string().trim().optional().default(''),
   options: z.array(optionSchema).optional().default([]),
 })
@@ -72,6 +73,7 @@ const productUpdateSchema = z.object({
   status: z.enum(['AVAILABLE', 'OUT_OF_STOCK', 'OUT_OF_SEASON']).optional(),
   isActive: z.boolean().optional(),
   isPublic: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),
   imageUrl: z.string().trim().optional(),
   options: z.array(optionSchema).optional(),
 })

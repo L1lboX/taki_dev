@@ -832,6 +832,14 @@ function enrichCatalogItemWithMenuMeta(item) {
     categoryName: category?.name || item.categoryName || 'General',
     isPublic: product.isPublic !== false,
     active: product.isActive && product.status === 'AVAILABLE' && Number(product.quantity) > 0,
+    isFeatured: product.isFeatured === true,
+  }
+}
+
+function ensureFeaturedMenuProductAvailable(productId) {
+  const featuredProduct = state.menuProducts.find((row) => row.id !== productId && row.isFeatured === true)
+  if (featuredProduct) {
+    throw new Error(`No se puede destacar este plato porque "${featuredProduct.name}" ya esta destacado. Desactivalo primero.`)
   }
 }
 
@@ -3058,6 +3066,9 @@ db.createMenuProduct = function createMenuProduct(payload) {
 
   const duplicated = state.menuProducts.find((row) => String(row.name || '').toLowerCase() === name.toLowerCase())
   if (duplicated) throw new Error('Ya existe un producto con ese nombre')
+  if (payload?.isFeatured === true) {
+    ensureFeaturedMenuProductAvailable(null)
+  }
 
   const product = {
     id: randomUUID(),
@@ -3072,6 +3083,7 @@ db.createMenuProduct = function createMenuProduct(payload) {
     status: String(payload?.status || 'AVAILABLE').trim().toUpperCase(),
     isActive: payload?.isActive !== false,
     isPublic: payload?.isPublic !== false,
+    isFeatured: payload?.isFeatured === true,
     imageUrl: String(payload?.imageUrl || '').trim(),
     options: asArray(payload?.options)
       .map((option, index) => ({
@@ -3114,6 +3126,9 @@ db.updateMenuProduct = function updateMenuProduct(productId, payload) {
     (row) => row.id !== product.id && String(row.name || '').toLowerCase() === merged.name.toLowerCase(),
   )
   if (duplicated) throw new Error('Ya existe un producto con ese nombre')
+  if (merged.isFeatured === true && product.isFeatured !== true) {
+    ensureFeaturedMenuProductAvailable(product.id)
+  }
 
   Object.assign(product, {
     sectionId,
@@ -3127,6 +3142,7 @@ db.updateMenuProduct = function updateMenuProduct(productId, payload) {
     status: String(merged.status || 'AVAILABLE').trim().toUpperCase(),
     isActive: merged.isActive !== false,
     isPublic: merged.isPublic !== false,
+    isFeatured: merged.isFeatured === true,
     imageUrl: String(merged.imageUrl || '').trim(),
     options: asArray(merged.options)
       .map((option, index) => ({

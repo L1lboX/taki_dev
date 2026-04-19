@@ -185,13 +185,15 @@ export default function PosPage() {
     [tables, selectedTableId],
   )
 
+  const selectedOperationalTableId = selectedTable?.operationalTableId || selectedTable?.id || ''
+
   const selectedTableQrOrders = useMemo(() => {
     if (!selectedTable) return []
     return orders
-      .filter((order) => order.tableId === selectedTable.id && order.source === 'QR')
+      .filter((order) => order.tableId === selectedOperationalTableId && order.source === 'QR')
       .filter((order) => order.status !== 'CLOSED' && order.status !== 'CANCELLED')
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  }, [orders, selectedTable])
+  }, [orders, selectedOperationalTableId, selectedTable])
 
   const liveOrders = useMemo(
     () => orders.filter((order) => order.status !== 'CLOSED' && order.status !== 'CANCELLED'),
@@ -201,9 +203,9 @@ export default function PosPage() {
   const selectedTableLiveOrders = useMemo(() => {
     if (!selectedTable) return []
     return liveOrders
-      .filter((order) => order.tableId === selectedTable.id && order.source !== 'QR')
+      .filter((order) => order.tableId === selectedOperationalTableId && order.source !== 'QR')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  }, [liveOrders, selectedTable])
+  }, [liveOrders, selectedOperationalTableId, selectedTable])
 
   const orderSummary = useMemo(() => summarizeLiveOrders(liveOrders), [liveOrders])
 
@@ -222,7 +224,8 @@ export default function PosPage() {
   const tableCards = useMemo(
     () =>
       tables.map((table) => {
-        const tableOrders = liveOrders.filter((order) => order.tableId === table.id)
+        const operationalTableId = table.operationalTableId || table.id
+        const tableOrders = liveOrders.filter((order) => order.tableId === operationalTableId)
         const pendingCount = tableOrders.filter((order) => ORDER_PENDING_STATUSES.has(order.status)).length
         const inProcessCount = tableOrders.filter((order) => ORDER_IN_PROCESS_STATUSES.has(order.status)).length
         const deliveredCount = tableOrders.filter((order) => ORDER_DELIVERED_STATUSES.has(order.status)).length
@@ -303,6 +306,10 @@ export default function PosPage() {
     mutationFn: (orderId) => api.sendKitchen(orderId),
   })
 
+  const sendKitchenBatchMutation = useMutation({
+    mutationFn: (payload) => api.sendKitchenBatch(payload),
+  })
+
   const approveQrOrderMutation = useMutation({
     mutationFn: (orderId) => api.approveOrder(orderId),
   })
@@ -313,6 +320,7 @@ export default function PosPage() {
     createOrderMutation.isPending ||
     addItemsMutation.isPending ||
     sendKitchenMutation.isPending ||
+    sendKitchenBatchMutation.isPending ||
     approveQrOrderMutation.isPending
 
   useEffect(() => {
@@ -503,12 +511,12 @@ export default function PosPage() {
 
     if (selectedTable.activeSession) {
       if (selectedTable.activeSession.guestsActive !== guests) {
-        await updateGuestsMutation.mutateAsync({ tableId: selectedTable.id, guests })
+        await updateGuestsMutation.mutateAsync({ tableId: selectedOperationalTableId, guests })
       }
       return
     }
 
-    await openSessionMutation.mutateAsync({ tableId: selectedTable.id, guests })
+    await openSessionMutation.mutateAsync({ tableId: selectedOperationalTableId, guests })
   }
 
   function buildOrderItems() {
@@ -660,6 +668,37 @@ export default function PosPage() {
       )
     } catch (error) {
       toast.error(error.message)
+    }
+  }
+
+  async function sendApprovedQrOrdersMerged() {
+    if (!selectedTableQrOrders.length) return
+    const approvedOrders = selectedTableQrOrders.filter((order) => order.status === 'APPROVED')
+    if (approvedOrders.length < 2) return
+
+    try {
+      const result = await sendKitchenBatchMutation.mutateAsync({
+        orderIds: approvedOrders.map((order) => order.id),
+        mergePrint: true,
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['tables'] }),
+        queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+      ])
+
+      if (result?.mergedTicket) {
+        try {
+          await downloadKitchenTicketPdf(result.mergedTicket, { tableNumber: selectedTable?.number || '-' })
+        } catch {
+          // dejamos continuar sin bloquear la operacion
+        }
+      }
+
+      toast.success(`Se enviaron ${approvedOrders.length} pedidos QR en una sola comanda`)
+    } catch (error) {
+      toast.error(error.message || 'No se pudieron enviar las comandas juntas')
     }
   }
 
@@ -994,6 +1033,23 @@ export default function PosPage() {
 
               {!!selectedTableQrOrders.length && (
                 <Stack sx={{ mt: 1.5 }} spacing={1.25}>
+                  {selectedTableQrOrders.filter((order) => order.status === 'APPROVED').length > 1 && (
+                    <MuiButton
+                      disabled={isConfirming}
+                      onClick={sendApprovedQrOrdersMerged}
+                      size="small"
+                      sx={{
+                        alignSelf: 'flex-start',
+                        bgcolor: ORDER_PANEL_COLORS.info,
+                        borderRadius: '12px',
+                        px: 2,
+                        '&:hover': { bgcolor: '#3048c2' },
+                      }}
+                      variant="contained"
+                    >
+                      Enviar juntas
+                    </MuiButton>
+                  )}
                   {selectedTableQrOrders.map((order) => (
                     <Paper
                       elevation={0}
@@ -1008,7 +1064,7 @@ export default function PosPage() {
                       <Stack alignItems={{ xs: 'flex-start', md: 'center' }} direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25}>
                         <Box>
                           <Typography sx={{ color: ORDER_PANEL_COLORS.ink, fontSize: 15, fontWeight: 700 }}>
-                            Pedido {order.id.slice(0, 8)}
+                            Pedido {order.id.slice(0, 8)}{order.guestNumber ? ` · Persona ${order.guestNumber}` : ''}
                           </Typography>
                           <Typography sx={{ mt: 0.35, color: ORDER_PANEL_COLORS.muted, fontSize: 13 }}>
                             Estado: {orderStatusLabel(order.status)} - Items: {order.items?.length || 0}

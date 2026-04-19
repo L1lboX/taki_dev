@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { asyncRoute, requireAuth, requireRoles } from '../auth.js'
 import { ROLES } from '../constants.js'
-import { requirePublicQrAccess } from '../qrToken.js'
+import { extractQrGuestToken, requirePublicQrAccess } from '../qrToken.js'
 import { db } from '../store.js'
 import { emitEvent } from '../realtime.js'
 
@@ -43,6 +43,16 @@ const updateTableSchema = z
 
 const markPrintedSchema = z.object({
   tableIds: z.array(z.string().min(1)).optional(),
+})
+
+const createTableGroupSchema = z.object({
+  mainTableId: z.string().min(1),
+  tableIds: z.array(z.string().min(1)).min(1).max(2),
+})
+
+const updateTableGroupSchema = z.object({
+  mainTableId: z.string().min(1).optional(),
+  tableIds: z.array(z.string().min(1)).min(2).max(3),
 })
 
 function parseBooleanQuery(value) {
@@ -103,19 +113,6 @@ function mapTableQrResponse(table, baseUrl) {
     qrGeneratedAt: table.qrGeneratedAt,
     qrPrintedAt: table.qrPrintedAt,
     qrUrl,
-  }
-}
-
-function mapPublicQrAccessResponse(table, menu) {
-  return {
-    tableId: table.id,
-    number: table.number,
-    salon: {
-      id: table.salon.id,
-      name: table.salon.name,
-    },
-    sessionOpen: Boolean(table.activeSessionId && db.getTableSessionById(table.activeSessionId)?.closedAt === null),
-    menu,
   }
 }
 
@@ -200,16 +197,122 @@ router.patch(
 )
 
 router.get(
+  '/groups',
+  requireAuth,
+  requireRoles(ROLES.WAITER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const active = parseBooleanQuery(req.query.active)
+    return res.json(db.listTableGroups({ active }))
+  }),
+)
+
+router.post(
+  '/groups',
+  requireAuth,
+  requireRoles(ROLES.WAITER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const payload = createTableGroupSchema.parse(req.body)
+    const group = db.createTableGroup(payload)
+
+    emitEvent('table.session.updated', {
+      type: 'table.group.created',
+      groupId: group.id,
+      tableIds: group.tableIds,
+    })
+
+    return res.status(201).json(group)
+  }),
+)
+
+router.patch(
+  '/groups/:id',
+  requireAuth,
+  requireRoles(ROLES.WAITER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const payload = updateTableGroupSchema.parse(req.body)
+    const group = db.updateTableGroup(req.params.id, payload)
+
+    emitEvent('table.session.updated', {
+      type: 'table.group.updated',
+      groupId: group.id,
+      tableIds: group.tableIds,
+    })
+
+    return res.json(group)
+  }),
+)
+
+router.delete(
+  '/groups/:id',
+  requireAuth,
+  requireRoles(ROLES.WAITER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const group = db.deleteTableGroup(req.params.id)
+
+    emitEvent('table.session.updated', {
+      type: 'table.group.deleted',
+      groupId: group.id,
+      tableIds: group.tableIds,
+    })
+
+    return res.json({
+      deleted: true,
+      id: group.id,
+    })
+  }),
+)
+
+router.get(
   '/qr/public/:tableId',
   requirePublicQrAccess,
   asyncRoute(async (req, res) => {
     const date = req.query.date?.toString()
-    const menu = {
-      date: date || new Date().toISOString().slice(0, 10),
-      items: db.getCatalogMenus(date),
+    const context = db.getPublicQrContext(req.qrAccess.table.id, date)
+    if (!context) {
+      return res.status(403).json({ error: 'QR invalido o no disponible' })
     }
+    return res.json(context)
+  }),
+)
 
-    return res.json(mapPublicQrAccessResponse(req.qrAccess.table, menu))
+router.post(
+  '/qr/public/:tableId/join',
+  requirePublicQrAccess,
+  asyncRoute(async (req, res) => {
+    const guestToken = extractQrGuestToken(req)
+    const result = db.joinQrGuestSession(req.qrAccess.table.id, guestToken)
+    const context = db.getPublicQrContext(req.qrAccess.table.id, req.query.date?.toString())
+
+    emitEvent('table.session.updated', {
+      type: 'table.qr.joined',
+      tableId: result.tableSession.tableId,
+      tableSessionId: result.tableSession.id,
+      guestSessionId: result.guestSession.id,
+      guestNumber: result.guestSession.guestNumber,
+      occupiedGuests: result.occupiedGuests,
+    })
+
+    return res.status(result.created ? 201 : 200).json({
+      ...result,
+      context,
+    })
+  }),
+)
+
+router.get(
+  '/qr/public/:tableId/me',
+  requirePublicQrAccess,
+  asyncRoute(async (req, res) => {
+    const guestToken = extractQrGuestToken(req)
+    const context = db.getPublicQrContext(req.qrAccess.table.id, req.query.date?.toString())
+    const me = db.getQrGuestContext(req.qrAccess.table.id, guestToken)
+
+    return res.json({
+      ...context,
+      tableSession: me?.tableSession || null,
+      guestSession: me?.guestSession || null,
+      activeOrders: me?.activeOrders || [],
+    })
   }),
 )
 

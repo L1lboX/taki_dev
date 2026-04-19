@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncRoute, requireAuth, requireRoles } from '../auth.js'
 import { ORDER_SOURCE, ORDER_STATUS, ROLES, SPLIT_MODE } from '../constants.js'
 import { enqueueKitchenPrint } from '../printer.js'
-import { requireQrToken } from '../qrToken.js'
+import { extractQrGuestToken, requireQrToken } from '../qrToken.js'
 import { emitEvent } from '../realtime.js'
 import { db } from '../store.js'
 
@@ -53,6 +54,11 @@ const qrCreateSchema = z.object({
 
 const qrItemsSchema = addItemsSchema
 
+const sendKitchenBatchSchema = z.object({
+  orderIds: z.array(z.string().min(1)).min(1),
+  mergePrint: z.boolean().default(false),
+})
+
 const historyQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(5).max(50).default(10),
@@ -80,6 +86,7 @@ function buildQrOrderNotificationPayload(order) {
     orderId: order.id,
     tableId: order.tableId,
     tableNumber: table?.number ?? null,
+    guestNumber: order.guestNumber ?? null,
     salonId: salon?.id ?? null,
     salonName: salon?.name ?? '',
     status: order.status,
@@ -167,11 +174,17 @@ router.post(
       return res.status(403).json({ error: 'Token QR no corresponde a la mesa' })
     }
 
-    const order = db.createOrder({
-      tableId: payload.tableId,
-      source: ORDER_SOURCE.QR,
-      createdByUserId: 'qr-client',
-    })
+    const guestToken = extractQrGuestToken(req)
+    if (!guestToken) {
+      return res.status(403).json({ error: 'Sesion QR requerida' })
+    }
+
+    const me = db.getQrGuestContext(payload.tableId, guestToken)
+    if (!me?.tableSession || !me?.guestSession) {
+      return res.status(409).json({ error: 'Debes unirte a la mesa antes de pedir' })
+    }
+
+    const order = db.createOrGetQrOrder(payload.tableId, me.guestSession.id)
 
     emitEvent('order.updated', order)
     emitEvent('table.session.updated', { tableId: payload.tableId })
@@ -184,6 +197,11 @@ router.post(
   '/qr/:id/items',
   requireQrToken,
   asyncRoute(async (req, res) => {
+    const guestToken = extractQrGuestToken(req)
+    if (!guestToken) {
+      return res.status(403).json({ error: 'Sesion QR requerida' })
+    }
+
     const targetOrder = db.getOrderById(req.params.id)
     if (!targetOrder) throw new Error('Pedido no existe')
     if (targetOrder.source !== ORDER_SOURCE.QR) {
@@ -191,6 +209,14 @@ router.post(
     }
     if (targetOrder.tableId !== req.qr.tableId) {
       return res.status(403).json({ error: 'Token QR no corresponde al pedido' })
+    }
+
+    const me = db.getQrGuestContext(targetOrder.tableId, guestToken)
+    if (!me?.guestSession) {
+      return res.status(409).json({ error: 'Sesion QR no activa para esta mesa' })
+    }
+    if (targetOrder.guestSessionId !== me.guestSession.id) {
+      return res.status(403).json({ error: 'La persona QR no puede modificar este pedido' })
     }
 
     const payload = qrItemsSchema.parse(req.body)
@@ -201,6 +227,47 @@ router.post(
       emitEvent('qr.new-order', buildQrOrderNotificationPayload(order))
     }
     return res.json(order)
+  }),
+)
+
+router.patch(
+  '/send-kitchen-batch',
+  requireAuth,
+  asyncRoute(async (req, res) => {
+    const payload = sendKitchenBatchSchema.parse(req.body)
+    const uniqueIds = Array.from(new Set(payload.orderIds))
+    const results = uniqueIds.map((orderId) => db.sendOrderToKitchen(orderId))
+
+    let mergedTicket = null
+    if (payload.mergePrint) {
+      const baseOrder = results[0]?.order
+      mergedTicket = {
+        id: `merge-${randomUUID()}`,
+        tableId: baseOrder?.tableId || '',
+        tableSessionId: baseOrder?.tableSessionId || null,
+        createdAt: new Date().toISOString(),
+        items: results.flatMap((result) =>
+          (result.ticket?.items || []).map((item) => ({
+            ...item,
+            productName: `${result.order?.guestNumber ? `P${result.order.guestNumber} · ` : ''}${item.productName}`,
+          })),
+        ),
+      }
+      enqueueKitchenPrint(mergedTicket)
+    } else {
+      results.forEach((result) => enqueueKitchenPrint(result.ticket))
+    }
+
+    results.forEach((result) => {
+      emitEvent('order.updated', result.order)
+      emitEvent('kitchen.ticket.updated', result.ticket)
+    })
+
+    return res.json({
+      orders: results.map((result) => result.order),
+      tickets: results.map((result) => result.ticket),
+      mergedTicket,
+    })
   }),
 )
 

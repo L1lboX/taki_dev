@@ -25,6 +25,21 @@ function withQrToken(options = {}, qrToken) {
   }
 }
 
+function withGuestToken(options = {}, guestToken) {
+  if (!guestToken) return options
+  return {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'X-QR-Guest-Token': guestToken,
+    },
+  }
+}
+
+function withQrHeaders(options = {}, qrToken, guestToken) {
+  return withGuestToken(withQrToken(options, qrToken), guestToken)
+}
+
 function withTokenQuery(path, qrToken) {
   if (!qrToken) return path
   const separator = path.includes('?') ? '&' : '?'
@@ -116,9 +131,22 @@ export const api = {
   createTablesBulk: (body) => apiRequest('/tables/bulk', { method: 'POST', body: JSON.stringify(body) }),
   updateTable: (tableId, body) => apiRequest(`/tables/${tableId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   resolveQrAccess: (tableId, qrToken) => apiRequest(withTokenQuery(`/tables/qr/public/${encodeURIComponent(tableId)}`, qrToken)),
+  joinQrTable: (tableId, qrToken, guestToken) =>
+    apiRequest(withTokenQuery(`/tables/qr/public/${encodeURIComponent(tableId)}/join`, qrToken), withQrHeaders({ method: 'POST' }, qrToken, guestToken)),
+  getQrMe: (tableId, qrToken, guestToken) =>
+    apiRequest(withTokenQuery(`/tables/qr/public/${encodeURIComponent(tableId)}/me`, qrToken), withQrHeaders({}, qrToken, guestToken)),
   getPendingQrs: () => apiRequest('/tables/qr/pending'),
   generatePendingQrs: () => apiRequest('/tables/qr/generate-pending', { method: 'POST', body: JSON.stringify({}) }),
   markPrintedQrs: (body = {}) => apiRequest('/tables/qr/mark-printed', { method: 'POST', body: JSON.stringify(body) }),
+  getTableGroups: ({ active } = {}) => {
+    const params = new URLSearchParams()
+    if (typeof active === 'boolean') params.set('active', String(active))
+    const query = params.toString()
+    return apiRequest(`/tables/groups${query ? `?${query}` : ''}`)
+  },
+  createTableGroup: (body) => apiRequest('/tables/groups', { method: 'POST', body: JSON.stringify(body) }),
+  updateTableGroup: (groupId, body) => apiRequest(`/tables/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTableGroup: (groupId) => apiRequest(`/tables/groups/${groupId}`, { method: 'DELETE' }),
   openTableSession: (tableId, body) => apiRequest(`/tables/${tableId}/session`, { method: 'POST', body: JSON.stringify(body) }),
   updateSessionGuests: (tableId, body) => apiRequest(`/tables/${tableId}/session/guests`, { method: 'PATCH', body: JSON.stringify(body) }),
   listOrders: (query = '') => apiRequest(`/orders${query ? `?${query}` : ''}`),
@@ -140,12 +168,13 @@ export const api = {
   updateHistoryOrder: (orderId, body) => apiRequest(`/orders/${orderId}/history`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteHistoryOrder: (orderId) => apiRequest(`/orders/${orderId}/history`, { method: 'DELETE' }),
   createOrder: (body) => apiRequest('/orders', { method: 'POST', body: JSON.stringify(body) }),
-  createQrOrder: (body, qrToken) => apiRequest('/orders/qr', withQrToken({ method: 'POST', body: JSON.stringify(body) }, qrToken)),
+  createQrOrder: (body, qrToken, guestToken) => apiRequest('/orders/qr', withQrHeaders({ method: 'POST', body: JSON.stringify(body) }, qrToken, guestToken)),
   addItems: (orderId, body) => apiRequest(`/orders/${orderId}/items`, { method: 'POST', body: JSON.stringify(body) }),
-  addQrItems: (orderId, body, qrToken) =>
-    apiRequest(`/orders/qr/${orderId}/items`, withQrToken({ method: 'POST', body: JSON.stringify(body) }, qrToken)),
+  addQrItems: (orderId, body, qrToken, guestToken) =>
+    apiRequest(`/orders/qr/${orderId}/items`, withQrHeaders({ method: 'POST', body: JSON.stringify(body) }, qrToken, guestToken)),
   approveOrder: (orderId) => apiRequest(`/orders/${orderId}/approve`, { method: 'PATCH' }),
   sendKitchen: (orderId) => apiRequest(`/orders/${orderId}/send-kitchen`, { method: 'PATCH' }),
+  sendKitchenBatch: (body) => apiRequest('/orders/send-kitchen-batch', { method: 'PATCH', body: JSON.stringify(body) }),
   payOrder: (orderId, body) => apiRequest(`/orders/${orderId}/payments`, { method: 'POST', body: JSON.stringify(body) }),
   listKitchenTickets: () => apiRequest('/kitchen/tickets'),
   updateKitchenStatus: (ticketId, body) => apiRequest(`/kitchen/tickets/${ticketId}/status`, { method: 'PATCH', body: JSON.stringify(body) }),

@@ -796,12 +796,15 @@ function syncOrdersAfterBills(tableSessionId) {
 }
 
 function mapMenuProductToCatalogItem(product) {
+  const section = state.menuSections.find((item) => item.id === product.sectionId)
   const category = state.menuCategories.find((item) => item.id === product.categoryId)
   const categoryName = category?.name || 'General'
 
   return {
     id: product.id,
     name: product.name,
+    sectionId: product.sectionId,
+    sectionName: section?.name || 'Carta completa',
     category: product.categoryId,
     categoryName,
     type: deriveCatalogFlags(product.categoryId).type,
@@ -812,6 +815,23 @@ function mapMenuProductToCatalogItem(product) {
     isPublic: product.isPublic !== false,
     active: product.isActive && product.status === 'AVAILABLE' && Number(product.quantity) > 0,
     days: [],
+  }
+}
+
+function enrichCatalogItemWithMenuMeta(item) {
+  const product = state.menuProducts.find((candidate) => candidate.id === item.id)
+  if (!product) return item
+
+  const section = state.menuSections.find((candidate) => candidate.id === product.sectionId)
+  const category = state.menuCategories.find((candidate) => candidate.id === product.categoryId)
+
+  return {
+    ...item,
+    sectionId: product.sectionId,
+    sectionName: section?.name || item.sectionName || 'Carta completa',
+    categoryName: category?.name || item.categoryName || 'General',
+    isPublic: product.isPublic !== false,
+    active: product.isActive && product.status === 'AVAILABLE' && Number(product.quantity) > 0,
   }
 }
 
@@ -935,14 +955,20 @@ export const db = {
   getCatalogMenus(date) {
     syncCatalogState()
     const selectedDate = date || dateOnly()
-    return clone(state.catalog.filter((item) => isCatalogAvailableOnDate(item, selectedDate)))
+    return clone(
+      state.catalog
+        .filter((item) => isCatalogAvailableOnDate(item, selectedDate))
+        .map((item) => enrichCatalogItemWithMenuMeta(item)),
+    )
   },
 
   getPublicCatalogMenus(date) {
     syncCatalogState()
     const selectedDate = date || dateOnly()
     return clone(
-      state.catalog.filter((item) => item.isPublic !== false && isCatalogAvailableOnDate(item, selectedDate)),
+      state.catalog
+        .map((item) => enrichCatalogItemWithMenuMeta(item))
+        .filter((item) => item.isPublic !== false && isCatalogAvailableOnDate(item, selectedDate)),
     )
   },
 
@@ -2226,17 +2252,7 @@ export const db = {
 
     const tableSession = this.getTableSessionById(order.tableSessionId)
     if (tableSession) {
-      const openOrders = tableSession.orderIds
-        .map((id) => this.getOrderById(id))
-        .filter((candidate) => candidate && candidate.status !== ORDER_STATUS.CLOSED && candidate.status !== ORDER_STATUS.CANCELLED)
-      if (openOrders.length === 0) {
-        tableSession.closedAt = nowIso()
-        const table = this.getTableById(tableSession.tableId)
-        if (table) {
-          table.activeSessionId = null
-          table.status = TABLE_STATUS.FREE
-        }
-      }
+      syncOrdersAfterBills(tableSession.id)
     }
 
     for (const soldItem of order.items) {
@@ -3520,16 +3536,22 @@ const mutatingMethods = new Set([
   'createTable',
   'createTablesBulk',
   'updateTableRecord',
+  'createTableGroup',
+  'updateTableGroup',
+  'deleteTableGroup',
   'ensureTableQrToken',
   'generatePendingTableQrs',
   'markTableQrsPrinted',
   'openTableSession',
+  'openAutoQrTableSession',
   'updateTableSessionGuests',
+  'joinQrGuestSession',
   'openCashSession',
   'closeCashSession',
   'updateOrderRecord',
   'deleteOrderRecord',
   'createOrder',
+  'createOrGetQrOrder',
   'addItemsToOrder',
   'approveQrOrder',
   'sendOrderToKitchen',

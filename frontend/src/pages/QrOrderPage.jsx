@@ -150,6 +150,11 @@ function itemCountOfOrders(orders) {
   return (Array.isArray(orders) ? orders : []).reduce((sum, order) => sum + Number(order?.items?.length || 0), 0)
 }
 
+function productSupportsIncludedEntry(product) {
+  if (!product) return false
+  return Boolean(product.isMenu) || product.type === 'MENU' || productCardGroup(product) === 'MENU'
+}
+
 export default function QrOrderPage() {
   const { tableId = '' } = useParams()
   const [searchParams] = useSearchParams()
@@ -260,6 +265,11 @@ export default function QrOrderPage() {
   const hasAvailableSeats = Boolean(accessQuery.data?.hasAvailableSeats)
 
   const filteredProducts = collections.byFilter[activeFilter] || []
+  const entryOptions = collections.extras
+  const chargeableExtras = selection.entryId
+    ? collections.extras.filter((extra) => extra.id !== selection.entryId)
+    : collections.extras
+  const supportsIncludedEntry = productSupportsIncludedEntry(selection.product)
 
   function openProductModal(product) {
     setSelection(createEmptySelection(product))
@@ -296,7 +306,6 @@ export default function QrOrderPage() {
 
   function buildDraftPayload(product) {
     const extras = []
-    if (selection.entryId) extras.push({ productId: selection.entryId, quantity: 1 })
     for (const extraId of selection.extraIds) extras.push({ productId: extraId, quantity: 1 })
     for (const beverageId of selection.beverageIds) extras.push({ productId: beverageId, quantity: 1 })
 
@@ -307,6 +316,7 @@ export default function QrOrderPage() {
           quantity: 1,
           variant: selection.variant || product?.variants?.[0] || 'normal',
           serviceMode: QR_SERVICE_MODE,
+          includedEntryProductId: supportsIncludedEntry ? (selection.entryId || undefined) : undefined,
           extras,
         },
       ],
@@ -572,7 +582,7 @@ export default function QrOrderPage() {
                   {selection.product?.name || 'Selecciona tu plato'}
                 </Typography>
                 <Typography sx={{ color: '#77574b', fontSize: 14 }}>
-                  Acompana tu plato con una entrada, bebida o extra antes de enviarlo.
+                  Personaliza tu pedido antes de enviarlo al mozo para aprobacion.
                 </Typography>
               </div>
               <Chip label={formatMoney(selection.product?.basePrice || 0)} sx={{ fontWeight: 800 }} />
@@ -614,33 +624,44 @@ export default function QrOrderPage() {
 
               <Divider />
 
-              <div>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1 }}>Acompana tu plato con una entrada</Typography>
-                <div className="qr-v2-option-cloud">
-                  <button
-                    className={`qr-v2-option-pill ${selection.entryId === '' ? 'active' : ''}`}
-                    onClick={() => setSelection((prev) => ({ ...prev, entryId: '' }))}
-                    type="button"
-                  >
-                    Sin entrada
-                  </button>
-                  {collections.extras.map((entry) => (
+              {supportsIncludedEntry ? (
+                <div>
+                  <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1 }}>Elige tu entrada incluida</Typography>
+                  <div className="qr-v2-option-cloud">
                     <button
-                      className={`qr-v2-option-pill ${selection.entryId === entry.id ? 'active' : ''}`}
-                      key={entry.id}
-                      onClick={() => setSelection((prev) => ({ ...prev, entryId: prev.entryId === entry.id ? '' : entry.id }))}
+                      className={`qr-v2-option-pill ${selection.entryId === '' ? 'active' : ''}`}
+                      onClick={() => setSelection((prev) => ({ ...prev, entryId: '' }))}
                       type="button"
                     >
-                      {entry.name} · {formatMoney(entry.basePrice)}
+                      Sin entrada
                     </button>
-                  ))}
+                    {entryOptions.map((entry) => (
+                      <button
+                        className={`qr-v2-option-pill ${selection.entryId === entry.id ? 'active' : ''}`}
+                        key={entry.id}
+                        onClick={() =>
+                          setSelection((prev) => {
+                            const nextEntryId = prev.entryId === entry.id ? '' : entry.id
+                            return {
+                              ...prev,
+                              entryId: nextEntryId,
+                              extraIds: prev.extraIds.filter((id) => id !== entry.id),
+                            }
+                          })
+                        }
+                        type="button"
+                      >
+                        {entry.name} · Incluida
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div>
                 <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1 }}>Extras y bebidas</Typography>
                 <div className="qr-v2-option-cloud">
-                  {collections.extras.map((extra) => (
+                  {chargeableExtras.map((extra) => (
                     <button
                       className={`qr-v2-option-pill ${selection.extraIds.includes(extra.id) ? 'active' : ''}`}
                       key={`extra-${extra.id}`}

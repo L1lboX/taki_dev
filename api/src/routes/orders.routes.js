@@ -23,6 +23,7 @@ const addItemsSchema = z.object({
       unitPrice: z.number().positive().optional(),
       variant: z.string().optional(),
       notes: z.string().optional(),
+      includedEntryProductId: z.string().min(1).optional(),
       guestNumber: z.number().int().positive().optional(),
       serviceMode: z.enum(['DINE_IN', 'TAKEAWAY']).optional(),
       extras: z

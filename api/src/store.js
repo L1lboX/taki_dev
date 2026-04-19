@@ -19,6 +19,7 @@ import {
   TABLE_STATUS,
 } from './constants.js'
 import {
+  CATALOG_CATEGORIES,
   categoryDisplayName,
   deriveCatalogFlags,
   isCatalogAvailableOnDate,
@@ -217,6 +218,46 @@ function buildServingLines(item, includedEntry) {
   }
 
   return Array.from(grouped.entries()).map(([name, quantity]) => ({ name, quantity }))
+}
+
+function normalizeLookupText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function includesSomeLookup(text, needles) {
+  const normalized = normalizeLookupText(text)
+  return needles.some((needle) => normalized.includes(normalizeLookupText(needle)))
+}
+
+function deriveMenuCatalogCategory(sectionName, categoryName) {
+  if (
+    includesSomeLookup(sectionName, ['entrada']) ||
+    includesSomeLookup(categoryName, ['entrada', 'sopa', 'ensalada', 'causa'])
+  ) {
+    return CATALOG_CATEGORIES.ENTRADAS
+  }
+
+  if (includesSomeLookup(sectionName, ['bebida', 'bar']) || includesSomeLookup(categoryName, ['bebida', 'gaseosa', 'jugo'])) {
+    return CATALOG_CATEGORIES.BEBIDAS
+  }
+
+  if (includesSomeLookup(sectionName, ['menu']) || includesSomeLookup(categoryName, ['menu'])) {
+    return CATALOG_CATEGORIES.MENU
+  }
+
+  if (includesSomeLookup(sectionName, ['ceviche', 'marino']) || includesSomeLookup(categoryName, ['ceviche', 'marino', 'marisco'])) {
+    return CATALOG_CATEGORIES.CEVICHES
+  }
+
+  if (includesSomeLookup(sectionName, ['carta']) || includesSomeLookup(categoryName, ['carta'])) {
+    return CATALOG_CATEGORIES.A_LA_CARTA
+  }
+
+  return CATALOG_CATEGORIES.PRINCIPALES
 }
 
 function normalizeCatalogRows(rawCatalog = [], categories = []) {
@@ -798,18 +839,21 @@ function syncOrdersAfterBills(tableSessionId) {
 function mapMenuProductToCatalogItem(product) {
   const section = state.menuSections.find((item) => item.id === product.sectionId)
   const category = state.menuCategories.find((item) => item.id === product.categoryId)
+  const sectionName = section?.name || 'Carta completa'
   const categoryName = category?.name || 'General'
+  const catalogCategory = deriveMenuCatalogCategory(sectionName, categoryName)
+  const flags = deriveCatalogFlags(catalogCategory)
 
   return {
     id: product.id,
     name: product.name,
     sectionId: product.sectionId,
-    sectionName: section?.name || 'Carta completa',
-    category: product.categoryId,
+    sectionName,
+    category: catalogCategory,
     categoryName,
-    type: deriveCatalogFlags(product.categoryId).type,
+    type: flags.type,
     basePrice: normalizeMoney(product.price),
-    isMenu: true,
+    isMenu: flags.isMenu,
     variants: asArray(product.options).map((option) => option.name).filter(Boolean),
     imageUrl: product.imageUrl || '',
     isPublic: product.isPublic !== false,
@@ -824,12 +868,19 @@ function enrichCatalogItemWithMenuMeta(item) {
 
   const section = state.menuSections.find((candidate) => candidate.id === product.sectionId)
   const category = state.menuCategories.find((candidate) => candidate.id === product.categoryId)
+  const sectionName = section?.name || item.sectionName || 'Carta completa'
+  const categoryName = category?.name || item.categoryName || 'General'
+  const catalogCategory = deriveMenuCatalogCategory(sectionName, categoryName)
+  const flags = deriveCatalogFlags(catalogCategory)
 
   return {
     ...item,
     sectionId: product.sectionId,
-    sectionName: section?.name || item.sectionName || 'Carta completa',
-    categoryName: category?.name || item.categoryName || 'General',
+    sectionName,
+    category: catalogCategory,
+    categoryName,
+    type: flags.type,
+    isMenu: flags.isMenu,
     isPublic: product.isPublic !== false,
     active: product.isActive && product.status === 'AVAILABLE' && Number(product.quantity) > 0,
     isFeatured: product.isFeatured === true,
@@ -2048,7 +2099,19 @@ export const db = {
         guestSessionId: order.guestSessionId || payload.guestSessionId || null,
         serviceMode: payload.serviceMode || SERVICE_MODE.DINE_IN,
         isMenu: Boolean(product.isMenu),
+        includedEntry: null,
         extras: [],
+      }
+
+      if (payload.includedEntryProductId) {
+        const includedEntryProduct = state.catalog.find((candidate) => candidate.id === payload.includedEntryProductId)
+        if (!includedEntryProduct) {
+          throw new Error(`Entrada incluida no encontrada: ${payload.includedEntryProductId}`)
+        }
+        item.includedEntry = {
+          productId: includedEntryProduct.id,
+          name: includedEntryProduct.name,
+        }
       }
 
       const extras = Array.isArray(payload.extras) ? payload.extras : []
@@ -2104,6 +2167,7 @@ export const db = {
       printAttempts: 0,
       items: order.items.map((item) => {
         const parsedNotes = parseKitchenNotes(item.notes)
+        const includedEntryName = item.includedEntry?.name || parsedNotes.includedEntry || null
         const detailText =
           parsedNotes.detail ||
           parsedNotes.extraDetails.join(' | ') ||
@@ -2115,8 +2179,8 @@ export const db = {
           variant: item.variant,
           notes: item.notes,
           detail: detailText,
-          includedEntry: parsedNotes.includedEntry || null,
-          servingLines: buildServingLines(item, parsedNotes.includedEntry),
+          includedEntry: includedEntryName,
+          servingLines: buildServingLines(item, includedEntryName),
           extras: item.extras.map((extra) => `${extra.name} x${extra.quantity}`),
         }
       }),
@@ -2252,6 +2316,7 @@ export const db = {
         name: item.productName,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
+        includedEntry: item.includedEntry ? { ...item.includedEntry } : null,
         extras: item.extras.map((extra) => ({ name: extra.name, quantity: extra.quantity, unitPrice: extra.unitPrice })),
       })),
     }
@@ -2267,6 +2332,13 @@ export const db = {
       const inventory = state.inventory.find((row) => row.productId === soldItem.productId)
       if (inventory) {
         inventory.stock = Math.max(0, inventory.stock - soldItem.quantity)
+      }
+
+      if (soldItem.includedEntry?.productId) {
+        const includedEntryInventory = state.inventory.find((row) => row.productId === soldItem.includedEntry.productId)
+        if (includedEntryInventory) {
+          includedEntryInventory.stock = Math.max(0, includedEntryInventory.stock - soldItem.quantity)
+        }
       }
 
       for (const extra of soldItem.extras) {

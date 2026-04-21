@@ -133,6 +133,7 @@ export default function PosPage() {
   const [persons, setPersons] = useState([])
   const [orderViewMode, setOrderViewMode] = useState('TABLES')
   const [tableStateFilter, setTableStateFilter] = useState('ALL')
+  const [salonFilter, setSalonFilter] = useState('ALL')
   const [isOrderDrawerOpen, setOrderDrawerOpen] = useState(false)
   const [isComposeMode, setComposeMode] = useState(false)
   const composeScrollRef = useRef(null)
@@ -247,6 +248,9 @@ export default function PosPage() {
         return {
           table,
           guestCount: table.activeSession?.guestsActive || 0,
+          salonId: table.salon?.id || table.salonId || 'NO_SALON',
+          salonName: table.salon?.name || 'Salon sin nombre',
+          salonSortOrder: Number(table.salon?.sortOrder || Number.MAX_SAFE_INTEGER),
           pendingCount,
           inProcessCount,
           deliveredCount,
@@ -260,6 +264,7 @@ export default function PosPage() {
   const filteredTableCards = useMemo(
     () =>
       tableCards.filter((row) => {
+        if (salonFilter !== 'ALL' && row.salonId !== salonFilter) return false
         if (tableStateFilter === 'ALL') return true
         if (tableStateFilter === 'AVAILABLE') return row.stateCode === 'AVAILABLE'
         if (tableStateFilter === 'OCCUPIED') return row.stateCode === 'OCCUPIED'
@@ -268,8 +273,55 @@ export default function PosPage() {
         if (tableStateFilter === 'DELIVERED') return row.stateCode === 'DELIVERED'
         return true
       }),
-    [tableCards, tableStateFilter],
+    [salonFilter, tableCards, tableStateFilter],
   )
+
+  const salonFilters = useMemo(() => {
+    const grouped = new Map()
+
+    for (const row of tableCards) {
+      const current = grouped.get(row.salonId) || {
+        id: row.salonId,
+        name: row.salonName,
+        sortOrder: row.salonSortOrder,
+        total: 0,
+      }
+      current.total += 1
+      grouped.set(row.salonId, current)
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return a.name.localeCompare(b.name)
+    })
+  }, [tableCards])
+
+  const groupedTableCards = useMemo(() => {
+    const grouped = new Map()
+
+    for (const row of filteredTableCards) {
+      if (!grouped.has(row.salonId)) {
+        grouped.set(row.salonId, {
+          salonId: row.salonId,
+          salonName: row.salonName,
+          salonSortOrder: row.salonSortOrder,
+          rows: [],
+        })
+      }
+
+      grouped.get(row.salonId).rows.push(row)
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => {
+        if (a.salonSortOrder !== b.salonSortOrder) return a.salonSortOrder - b.salonSortOrder
+        return a.salonName.localeCompare(b.salonName)
+      })
+      .map((group) => ({
+        ...group,
+        rows: group.rows.sort((a, b) => Number(a.table.number || 0) - Number(b.table.number || 0)),
+      }))
+  }, [filteredTableCards])
 
   const selectedTableCard = useMemo(
     () => tableCards.find((row) => row.table.id === selectedTableId) || null,
@@ -806,31 +858,70 @@ export default function PosPage() {
           )}
         </div>
 
-        {orderViewMode === 'TABLES' && (
-          <div className="pos-orders-table-grid">
-            {filteredTableCards.map((row) => (
+        {orderViewMode === 'TABLES' && !!salonFilters.length && (
+          <div className="pos-orders-salon-filters">
+            <button
+              className={`pos-orders-salon-chip ${salonFilter === 'ALL' ? 'active' : ''}`}
+              onClick={() => setSalonFilter('ALL')}
+              type="button"
+            >
+              Todos los salones <span className="badge">{tableCards.length}</span>
+            </button>
+
+            {salonFilters.map((salon) => (
               <button
-                className={`pos-orders-table-card tone-${row.stateMeta.tone} ${selectedTableId === row.table.id ? 'active' : ''}`}
-                key={row.table.id}
-                onClick={() => selectTable(row.table)}
+                className={`pos-orders-salon-chip ${salonFilter === salon.id ? 'active' : ''}`}
+                key={salon.id}
+                onClick={() => setSalonFilter(salon.id)}
                 type="button"
               >
-                <div className="pos-orders-table-head">
-                  <p className="pos-orders-table-number">{String(row.table.number).padStart(2, '0')}</p>
-                  <span className="pos-orders-table-guests"><i className="fi fi-rr-users" /> {row.guestCount}</span>
-                </div>
-
-                <div className="pos-orders-table-status">
-                  <span className={`pos-orders-dot ${row.stateMeta.tone}`} />
-                  <span>{row.stateMeta.label}</span>
-                </div>
-
-                <div className="pos-orders-table-counters">
-                  <span className="counter pending"><i className="fi fi-rr-hourglass-end" /> {row.pendingCount}</span>
-                  <span className="counter process"><i className="fi fi-rr-fire-flame-curved" /> {row.inProcessCount}</span>
-                  <span className="counter delivered"><i className="fi fi-rr-check" /> {row.deliveredCount}</span>
-                </div>
+                {salon.name} <span className="badge">{salon.total}</span>
               </button>
+            ))}
+          </div>
+        )}
+
+        {orderViewMode === 'TABLES' && (
+          <div className="pos-orders-salon-groups">
+            {groupedTableCards.map((group) => (
+              <section className="pos-orders-salon-group" key={group.salonId}>
+                <div className="pos-orders-salon-head">
+                  <div>
+                    <p className="pos-orders-salon-kicker">Salon</p>
+                    <h3 className="pos-orders-salon-title">{group.salonName}</h3>
+                  </div>
+                  <span className="badge">{group.rows.length} mesa{group.rows.length === 1 ? '' : 's'}</span>
+                </div>
+
+                <div className="pos-orders-table-grid">
+                  {group.rows.map((row) => (
+                    <button
+                      className={`pos-orders-table-card tone-${row.stateMeta.tone} ${selectedTableId === row.table.id ? 'active' : ''}`}
+                      key={row.table.id}
+                      onClick={() => selectTable(row.table)}
+                      type="button"
+                    >
+                      <div className="pos-orders-table-head">
+                        <p className="pos-orders-table-number">{String(row.table.number).padStart(2, '0')}</p>
+                        <span className="pos-orders-table-guests"><i className="fi fi-rr-users" /> {row.guestCount}</span>
+                      </div>
+
+                      <p className="pos-orders-table-salon">{row.salonName}</p>
+
+                      <div className="pos-orders-table-status">
+                        <span className={`pos-orders-dot ${row.stateMeta.tone}`} />
+                        <span>{row.stateMeta.label}</span>
+                      </div>
+
+                      <div className="pos-orders-table-counters">
+                        <span className="counter pending"><i className="fi fi-rr-hourglass-end" /> {row.pendingCount}</span>
+                        <span className="counter process"><i className="fi fi-rr-fire-flame-curved" /> {row.inProcessCount}</span>
+                        <span className="counter delivered"><i className="fi fi-rr-check" /> {row.deliveredCount}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
 
             {!filteredTableCards.length && (

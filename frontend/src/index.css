@@ -1405,6 +1405,47 @@ textarea:focus {
   gap: 10px;
 }
 
+.pos-orders-salon-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pos-orders-salon-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--txt2);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.pos-orders-salon-chip:hover {
+  border-color: #a8c1e6;
+  color: var(--txt);
+  background: #fff;
+}
+
+.pos-orders-salon-chip.active {
+  border-color: #2f78d8;
+  background: rgba(47, 120, 216, 0.1);
+  color: #1e5ca8;
+  box-shadow: 0 6px 14px rgba(47, 120, 216, 0.12);
+}
+
+.pos-orders-salon-chip.active .badge {
+  background: rgba(47, 120, 216, 0.14);
+  border-color: transparent;
+  color: #1e5ca8;
+}
+
 .pos-orders-view-tabs {
   display: inline-flex;
   align-items: center;
@@ -1470,6 +1511,44 @@ textarea:focus {
   gap: 10px;
 }
 
+.pos-orders-salon-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.pos-orders-salon-group {
+  border: 1px solid rgba(197, 186, 168, 0.75);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 14px;
+  box-shadow: 0 10px 24px rgba(39, 62, 94, 0.05);
+}
+
+.pos-orders-salon-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pos-orders-salon-kicker {
+  margin: 0 0 4px;
+  color: var(--txt3);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pos-orders-salon-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--txt);
+}
+
 .pos-orders-table-card {
   width: 100%;
   border: 1px solid var(--border);
@@ -1528,6 +1607,13 @@ textarea:focus {
   line-height: 1;
   font-weight: 700;
   color: var(--txt);
+}
+
+.pos-orders-table-salon {
+  margin: -2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--txt3);
 }
 
 .pos-orders-table-guests {
@@ -3902,6 +3988,19 @@ textarea:focus {
   .pos-orders-toolbar select {
     max-width: none;
     width: 100%;
+  }
+
+  .pos-orders-salon-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .pos-orders-salon-chip {
+    justify-content: space-between;
+  }
+
+  .pos-orders-salon-group {
+    padding: 12px;
   }
 
   .pos-orders-table-grid {

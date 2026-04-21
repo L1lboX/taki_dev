@@ -6,8 +6,8 @@ import { api } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('mesero')
-  const [password, setPassword] = useState('123456')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const loginStore = useAuthStore((state) => state.login)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -24,34 +24,68 @@ export default function LoginPage() {
       toast.error(error.message)
     },
   })
+  const isDisabled = mutation.isPending || !username.trim() || !password.trim()
 
   const onSubmit = (event) => {
     event.preventDefault()
-    mutation.mutate({ username, password })
+    const cleanUsername = username.trim()
+    const cleanPassword = password.trim()
+    if (!cleanUsername || !cleanPassword) {
+      toast.error('Completa usuario y contrasena para continuar')
+      return
+    }
+    mutation.mutate({ username: cleanUsername, password: cleanPassword })
   }
 
   return (
     <div className="auth-shell px-4">
-      <form className="auth-card" onSubmit={onSubmit}>
-        <span className="auth-brand">TAKI OPERATIONS</span>
-        <h1 className="auth-title">TAKI POS</h1>
-        <p className="auth-subtitle">Inicia sesion para operar el restaurante</p>
+      <form autoComplete="off" className="auth-card" onSubmit={onSubmit}>
+        <div className="auth-copy">
+          <span className="auth-brand">TAKI POS</span>
+          <p className="auth-kicker">Acceso seguro</p>
+          <h1 className="auth-title">Iniciar sesion</h1>
+          <p className="auth-subtitle">Ingresa tus credenciales para continuar.</p>
+        </div>
 
-        <label className="mt-5 block text-sm font-semibold">Usuario</label>
-        <input className="mt-1" onChange={(event) => setUsername(event.target.value)} value={username} />
+        <div className="auth-field">
+          <label className="auth-label" htmlFor="login-username">
+            Usuario
+          </label>
+          <input
+            autoCapitalize="none"
+            autoComplete="off"
+            className="auth-input"
+            id="login-username"
+            name="taki-login-user"
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Tu usuario"
+            spellCheck={false}
+            type="text"
+            value={username}
+          />
+        </div>
 
-        <label className="mt-3 block text-sm font-semibold">Contrasena</label>
-        <input className="mt-1" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
+        <div className="auth-field">
+          <label className="auth-label" htmlFor="login-password">
+            Contrasena
+          </label>
+          <input
+            autoComplete="off"
+            className="auth-input"
+            id="login-password"
+            name="taki-login-password"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Tu contrasena"
+            type="password"
+            value={password}
+          />
+        </div>
 
-        <button className="btn-primary mt-5 w-full" disabled={mutation.isPending} type="submit">
+        <button className="btn-primary auth-submit" disabled={isDisabled} type="submit">
           {mutation.isPending ? 'Ingresando...' : 'Ingresar'}
         </button>
 
-        <div className="auth-hint mt-4 text-xs">
-          <p>Usuarios demo:</p>
-          <p>`superadmin`, `admin`, `cocinero`, `mesero`</p>
-          <p>Contrasena: `123456`</p>
-        </div>
+        <p className="auth-note">Acceso autorizado solo para personal registrado.</p>
       </form>
     </div>
   )

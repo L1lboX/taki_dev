@@ -81,6 +81,10 @@ function formatMoney(value) {
   return `S/. ${Number(value || 0).toFixed(2)}`
 }
 
+function normalizeLabel(label) {
+  return String(label || '').replace(/^Entrada extra:\s*/i, '').trim()
+}
+
 function productImage(product) {
   return product?.imageUrl || ''
 }
@@ -88,11 +92,39 @@ function productImage(product) {
 function createEmptySelection(product = null) {
   return {
     product,
-    variant: product?.variants?.[0] || 'normal',
     entryId: '',
-    extraIds: [],
+    showExtras: false,
+    extraEntryEnabled: false,
+    beverageEnabled: false,
+    extraEntryIds: [],
     beverageIds: [],
   }
+}
+
+function mapOptions(items) {
+  return (Array.isArray(items) ? items : []).map((item) => ({
+    ...item,
+    label: normalizeLabel(item.name),
+    price: Number(item.basePrice || 0),
+  }))
+}
+
+function buildOrderLineMeta(item) {
+  const parts = []
+
+  if (item?.variant && item.variant !== 'normal') {
+    parts.push(item.variant)
+  }
+
+  if (item?.includedEntry?.name) {
+    parts.push(`Entrada: ${normalizeLabel(item.includedEntry.name)}`)
+  }
+
+  for (const extra of item?.extras || []) {
+    parts.push(`${normalizeLabel(extra.name)} x${Number(extra.quantity || 0) || 1}`)
+  }
+
+  return parts.join(' | ')
 }
 
 function productCardGroup(product) {
@@ -265,11 +297,31 @@ export default function QrOrderPage() {
   const hasAvailableSeats = Boolean(accessQuery.data?.hasAvailableSeats)
 
   const filteredProducts = collections.byFilter[activeFilter] || []
-  const entryOptions = collections.extras
-  const chargeableExtras = selection.entryId
-    ? collections.extras.filter((extra) => extra.id !== selection.entryId)
-    : collections.extras
+  const entryOptions = useMemo(() => mapOptions(collections.extras), [collections.extras])
+  const beverageOptions = useMemo(() => mapOptions(collections.beverages), [collections.beverages])
+  const entryMap = useMemo(() => new Map(entryOptions.map((option) => [option.id, option])), [entryOptions])
+  const beverageMap = useMemo(() => new Map(beverageOptions.map((option) => [option.id, option])), [beverageOptions])
   const supportsIncludedEntry = productSupportsIncludedEntry(selection.product)
+  const extraCount =
+    (selection.extraEntryEnabled ? selection.extraEntryIds.filter(Boolean).length : 0) +
+    (selection.beverageEnabled ? selection.beverageIds.filter(Boolean).length : 0)
+  const estimatedSubtotal = useMemo(() => {
+    let subtotal = Number(selection.product?.basePrice || 0)
+
+    if (selection.extraEntryEnabled) {
+      for (const id of selection.extraEntryIds) {
+        subtotal += Number(entryMap.get(id)?.price || 0)
+      }
+    }
+
+    if (selection.beverageEnabled) {
+      for (const id of selection.beverageIds) {
+        subtotal += Number(beverageMap.get(id)?.price || 0)
+      }
+    }
+
+    return subtotal
+  }, [beverageMap, entryMap, selection.beverageEnabled, selection.beverageIds, selection.extraEntryEnabled, selection.extraEntryIds, selection.product])
 
   function openProductModal(product) {
     setSelection(createEmptySelection(product))
@@ -280,6 +332,70 @@ export default function QrOrderPage() {
     setProductModalOpen(false)
     setSelection(createEmptySelection())
     setGuestChoiceOpen(false)
+  }
+
+  function toggleSelectionExtraType(type, enabled) {
+    setSelection((prev) => {
+      if (type === 'entry') {
+        return {
+          ...prev,
+          extraEntryEnabled: enabled,
+          extraEntryIds: enabled ? (prev.extraEntryIds.length ? prev.extraEntryIds : [entryOptions[0]?.id || '']) : [],
+        }
+      }
+
+      return {
+        ...prev,
+        beverageEnabled: enabled,
+        beverageIds: enabled ? (prev.beverageIds.length ? prev.beverageIds : [beverageOptions[0]?.id || '']) : [],
+      }
+    })
+  }
+
+  function addSelectionExtraRow(type) {
+    setSelection((prev) => {
+      if (type === 'entry') {
+        return {
+          ...prev,
+          extraEntryIds: [...prev.extraEntryIds, entryOptions[0]?.id || ''],
+        }
+      }
+
+      return {
+        ...prev,
+        beverageIds: [...prev.beverageIds, beverageOptions[0]?.id || ''],
+      }
+    })
+  }
+
+  function updateSelectionExtraRow(type, rowIndex, value) {
+    setSelection((prev) => {
+      if (type === 'entry') {
+        const next = [...prev.extraEntryIds]
+        next[rowIndex] = value
+        return { ...prev, extraEntryIds: next }
+      }
+
+      const next = [...prev.beverageIds]
+      next[rowIndex] = value
+      return { ...prev, beverageIds: next }
+    })
+  }
+
+  function removeSelectionExtraRow(type, rowIndex) {
+    setSelection((prev) => {
+      if (type === 'entry') {
+        return {
+          ...prev,
+          extraEntryIds: prev.extraEntryIds.filter((_, index) => index !== rowIndex),
+        }
+      }
+
+      return {
+        ...prev,
+        beverageIds: prev.beverageIds.filter((_, index) => index !== rowIndex),
+      }
+    })
   }
 
   async function ensureGuest(mode = 'current') {
@@ -306,15 +422,23 @@ export default function QrOrderPage() {
 
   function buildDraftPayload(product) {
     const extras = []
-    for (const extraId of selection.extraIds) extras.push({ productId: extraId, quantity: 1 })
-    for (const beverageId of selection.beverageIds) extras.push({ productId: beverageId, quantity: 1 })
+    if (selection.extraEntryEnabled) {
+      for (const extraId of selection.extraEntryIds.filter(Boolean)) {
+        extras.push({ productId: extraId, quantity: 1 })
+      }
+    }
+    if (selection.beverageEnabled) {
+      for (const beverageId of selection.beverageIds.filter(Boolean)) {
+        extras.push({ productId: beverageId, quantity: 1 })
+      }
+    }
 
     return {
       items: [
         {
           productId: product.id,
           quantity: 1,
-          variant: selection.variant || product?.variants?.[0] || 'normal',
+          variant: product?.variants?.[0] || 'normal',
           serviceMode: QR_SERVICE_MODE,
           includedEntryProductId: supportsIncludedEntry ? (selection.entryId || undefined) : undefined,
           extras,
@@ -544,15 +668,19 @@ export default function QrOrderPage() {
                         </div>
 
                         <div className="qr-v2-order-lines">
-                          {(order.items || []).map((item) => (
-                            <div className="qr-v2-order-line" key={item.id}>
-                              <div>
-                                <strong>{item.productName}</strong>
-                                <span>{item.variant || 'normal'}</span>
+                          {(order.items || []).map((item) => {
+                            const lineMeta = buildOrderLineMeta(item)
+
+                            return (
+                              <div className="qr-v2-order-line" key={item.id}>
+                                <div>
+                                  <strong>{item.productName}</strong>
+                                  {lineMeta && <span>{lineMeta}</span>}
+                                </div>
+                                <em>{formatMoney(item.unitPrice)}</em>
                               </div>
-                              <em>{formatMoney(item.unitPrice)}</em>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </article>
                     ))}
@@ -601,102 +729,242 @@ export default function QrOrderPage() {
                 </div>
 
                 <div>
-                  <Typography sx={{ fontSize: 15, color: '#77574b' }}>{selection.product?.categoryName || selection.product?.sectionName || 'Carta'}</Typography>
-                  {selection.product?.variants?.length > 0 && (
-                    <TextField
-                      fullWidth
-                      label="Variante"
-                      onChange={(event) => setSelection((prev) => ({ ...prev, variant: event.target.value }))}
-                      select
-                      size="small"
-                      sx={{ mt: 1.5 }}
-                      value={selection.variant}
-                    >
-                      {selection.product.variants.map((variant) => (
-                        <MenuItem key={variant} value={variant}>
-                          {variant}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
+                  <Typography sx={{ fontSize: 15, color: '#77574b' }}>
+                    {selection.product?.categoryName || selection.product?.sectionName || 'Carta'}
+                  </Typography>
                 </div>
               </div>
 
               <Divider />
 
               {supportsIncludedEntry ? (
-                <div>
-                  <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1 }}>Elige tu entrada incluida</Typography>
-                  <div className="qr-v2-option-cloud">
-                    <button
-                      className={`qr-v2-option-pill ${selection.entryId === '' ? 'active' : ''}`}
-                      onClick={() => setSelection((prev) => ({ ...prev, entryId: '' }))}
-                      type="button"
-                    >
-                      Sin entrada
-                    </button>
-                    {entryOptions.map((entry) => (
-                      <button
-                        className={`qr-v2-option-pill ${selection.entryId === entry.id ? 'active' : ''}`}
-                        key={entry.id}
-                        onClick={() =>
-                          setSelection((prev) => {
-                            const nextEntryId = prev.entryId === entry.id ? '' : entry.id
-                            return {
-                              ...prev,
-                              entryId: nextEntryId,
-                              extraIds: prev.extraIds.filter((id) => id !== entry.id),
-                            }
-                          })
-                        }
-                        type="button"
-                      >
-                        {entry.name} · Incluida
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <TextField
+                  fullWidth
+                  label="Entrada incluida"
+                  onChange={(event) => setSelection((prev) => ({ ...prev, entryId: event.target.value }))}
+                  select
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '14px',
+                      bgcolor: '#fff',
+                    },
+                  }}
+                  value={selection.entryId}
+                >
+                  <MenuItem value="">Sin entrada</MenuItem>
+                  {entryOptions.map((entry) => (
+                    <MenuItem key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
               ) : null}
 
-              <div>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, mb: 1 }}>Extras y bebidas</Typography>
-                <div className="qr-v2-option-cloud">
-                  {chargeableExtras.map((extra) => (
-                    <button
-                      className={`qr-v2-option-pill ${selection.extraIds.includes(extra.id) ? 'active' : ''}`}
-                      key={`extra-${extra.id}`}
-                      onClick={() =>
-                        setSelection((prev) => ({
-                          ...prev,
-                          extraIds: prev.extraIds.includes(extra.id)
-                            ? prev.extraIds.filter((id) => id !== extra.id)
-                            : [...prev.extraIds, extra.id],
-                        }))
-                      }
-                      type="button"
-                    >
-                      {extra.name} · {formatMoney(extra.basePrice)}
-                    </button>
-                  ))}
-                  {collections.beverages.map((beverage) => (
-                    <button
-                      className={`qr-v2-option-pill ${selection.beverageIds.includes(beverage.id) ? 'active' : ''}`}
-                      key={`beverage-${beverage.id}`}
-                      onClick={() =>
-                        setSelection((prev) => ({
-                          ...prev,
-                          beverageIds: prev.beverageIds.includes(beverage.id)
-                            ? prev.beverageIds.filter((id) => id !== beverage.id)
-                            : [...prev.beverageIds, beverage.id],
-                        }))
-                      }
-                      type="button"
-                    >
-                      {beverage.name} · {formatMoney(beverage.basePrice)}
-                    </button>
-                  ))}
+              {(entryOptions.length > 0 || beverageOptions.length > 0) && (
+                <div>
+                  <Button
+                    onClick={() => setSelection((prev) => ({ ...prev, showExtras: !prev.showExtras }))}
+                    size="small"
+                    sx={{
+                      borderRadius: '999px',
+                      px: 2,
+                      py: 1,
+                      borderColor: selection.showExtras ? '#97232f' : 'rgba(151, 35, 47, 0.25)',
+                      color: selection.showExtras ? '#97232f' : '#32231d',
+                      bgcolor: selection.showExtras ? 'rgba(151, 35, 47, 0.08)' : '#fff',
+                    }}
+                    variant="outlined"
+                  >
+                    {selection.showExtras ? 'Cerrar extras' : 'Anadir extra'}
+                    {extraCount > 0 ? ` (${extraCount})` : ''}
+                  </Button>
+
+                  {selection.showExtras && (
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                            px: 1.5,
+                            py: 1,
+                            borderRadius: '14px',
+                            border: '1px solid',
+                            borderColor: selection.extraEntryEnabled ? '#97232f' : 'rgba(151, 35, 47, 0.14)',
+                            bgcolor: selection.extraEntryEnabled ? 'rgba(151, 35, 47, 0.08)' : '#fff',
+                            flex: 1,
+                          }}
+                        >
+                          <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Entrada extra</Typography>
+                          <Button
+                            disabled={!entryOptions.length}
+                            onClick={() => toggleSelectionExtraType('entry', !selection.extraEntryEnabled)}
+                            size="small"
+                            sx={{ minWidth: 88, borderRadius: '10px' }}
+                            variant={selection.extraEntryEnabled ? 'contained' : 'outlined'}
+                          >
+                            {selection.extraEntryEnabled ? 'Activo' : 'Agregar'}
+                          </Button>
+                        </Box>
+
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                            px: 1.5,
+                            py: 1,
+                            borderRadius: '14px',
+                            border: '1px solid',
+                            borderColor: selection.beverageEnabled ? '#365edc' : 'rgba(54, 94, 220, 0.14)',
+                            bgcolor: selection.beverageEnabled ? 'rgba(54, 94, 220, 0.08)' : '#fff',
+                            flex: 1,
+                          }}
+                        >
+                          <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Bebida</Typography>
+                          <Button
+                            disabled={!beverageOptions.length}
+                            onClick={() => toggleSelectionExtraType('beverage', !selection.beverageEnabled)}
+                            size="small"
+                            sx={{ minWidth: 88, borderRadius: '10px' }}
+                            variant={selection.beverageEnabled ? 'contained' : 'outlined'}
+                          >
+                            {selection.beverageEnabled ? 'Activo' : 'Agregar'}
+                          </Button>
+                        </Box>
+                      </Stack>
+
+                      {selection.extraEntryEnabled && (
+                        <Stack spacing={1}>
+                          <Typography sx={{ fontSize: 15, fontWeight: 800 }}>Entradas extra</Typography>
+                          {(selection.extraEntryIds.length ? selection.extraEntryIds : ['']).map((value, rowIndex) => (
+                            <Stack direction="row" key={`entry-extra-${rowIndex}`} spacing={1}>
+                              <TextField
+                                fullWidth
+                                onChange={(event) => updateSelectionExtraRow('entry', rowIndex, event.target.value)}
+                                select
+                                size="small"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    borderRadius: '14px',
+                                    bgcolor: '#fff',
+                                  },
+                                }}
+                                value={value}
+                              >
+                                <MenuItem value="">Seleccionar entrada</MenuItem>
+                                {entryOptions.map((option) => (
+                                  <MenuItem key={option.id} value={option.id}>
+                                    {option.label} - {formatMoney(option.price)}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <Button
+                                color="inherit"
+                                onClick={() => removeSelectionExtraRow('entry', rowIndex)}
+                                size="small"
+                                sx={{
+                                  minWidth: 'auto',
+                                  px: 1.5,
+                                  borderRadius: '12px',
+                                  color: '#97232f',
+                                }}
+                                type="button"
+                              >
+                                Quitar
+                              </Button>
+                            </Stack>
+                          ))}
+                          <Button
+                            onClick={() => addSelectionExtraRow('entry')}
+                            size="small"
+                            sx={{ alignSelf: 'flex-start', borderRadius: '12px' }}
+                            type="button"
+                          >
+                            + Agregar otra entrada
+                          </Button>
+                        </Stack>
+                      )}
+
+                      {selection.beverageEnabled && (
+                        <Stack spacing={1}>
+                          <Typography sx={{ fontSize: 15, fontWeight: 800 }}>Bebidas</Typography>
+                          {(selection.beverageIds.length ? selection.beverageIds : ['']).map((value, rowIndex) => (
+                            <Stack direction="row" key={`beverage-extra-${rowIndex}`} spacing={1}>
+                              <TextField
+                                fullWidth
+                                onChange={(event) => updateSelectionExtraRow('beverage', rowIndex, event.target.value)}
+                                select
+                                size="small"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    borderRadius: '14px',
+                                    bgcolor: '#fff',
+                                  },
+                                }}
+                                value={value}
+                              >
+                                <MenuItem value="">Seleccionar bebida</MenuItem>
+                                {beverageOptions.map((option) => (
+                                  <MenuItem key={option.id} value={option.id}>
+                                    {option.label} - {formatMoney(option.price)}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <Button
+                                color="inherit"
+                                onClick={() => removeSelectionExtraRow('beverage', rowIndex)}
+                                size="small"
+                                sx={{
+                                  minWidth: 'auto',
+                                  px: 1.5,
+                                  borderRadius: '12px',
+                                  color: '#365edc',
+                                }}
+                                type="button"
+                              >
+                                Quitar
+                              </Button>
+                            </Stack>
+                          ))}
+                          <Button
+                            onClick={() => addSelectionExtraRow('beverage')}
+                            size="small"
+                            sx={{ alignSelf: 'flex-start', borderRadius: '12px' }}
+                            type="button"
+                          >
+                            + Agregar otra bebida
+                          </Button>
+                        </Stack>
+                      )}
+                    </Stack>
+                  )}
                 </div>
-              </div>
+              )}
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 2,
+                  px: 1,
+                  py: 1.25,
+                  borderTop: '1px solid rgba(151, 35, 47, 0.12)',
+                  borderBottom: '1px solid rgba(151, 35, 47, 0.12)',
+                }}
+              >
+                <Typography sx={{ color: '#77574b', fontSize: 15, fontWeight: 700 }}>
+                  Subtotal estimado
+                </Typography>
+                <Typography sx={{ color: '#214734', fontSize: 22, fontWeight: 900 }}>
+                  {formatMoney(estimatedSubtotal)}
+                </Typography>
+              </Box>
 
               <Button
                 disabled={joinMutation.isPending || createOrderMutation.isPending || addItemsMutation.isPending}
@@ -774,3 +1042,4 @@ export default function QrOrderPage() {
     </div>
   )
 }
+

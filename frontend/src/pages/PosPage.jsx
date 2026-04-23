@@ -85,6 +85,46 @@ function subtotalOfPerson(person, mainMap, entryMap, beverageMap) {
   return Number(subtotal.toFixed(2))
 }
 
+function summarizeQrOrdersByGuest(orders) {
+  const grouped = new Map()
+
+  for (const order of orders) {
+    const guestNumber = Number(order?.guestNumber || 0)
+    if (guestNumber <= 0) continue
+
+    if (!grouped.has(guestNumber)) {
+      grouped.set(guestNumber, {
+        guestNumber,
+        guestSessionId: String(order?.guestSessionId || '').trim() || null,
+        total: 0,
+        orderCount: 0,
+        itemCount: 0,
+        itemLabels: [],
+      })
+    }
+
+    const target = grouped.get(guestNumber)
+    if (!target.guestSessionId && order?.guestSessionId) {
+      target.guestSessionId = String(order.guestSessionId).trim() || null
+    }
+
+    target.total += Number(order?.totals?.total || 0)
+    target.orderCount += 1
+
+    for (const item of order?.items || []) {
+      target.itemCount += Number(item?.quantity || 0) || 1
+      target.itemLabels.push(normalizeLabel(item?.productName || 'Plato'))
+    }
+  }
+
+  for (const target of grouped.values()) {
+    target.total = Number(target.total.toFixed(2))
+    target.itemLabels = Array.from(new Set(target.itemLabels.filter(Boolean))).slice(0, 4)
+  }
+
+  return grouped
+}
+
 const ORDER_PENDING_STATUSES = new Set(['DRAFT', 'PENDING_WAITER_APPROVAL', 'APPROVED'])
 const ORDER_IN_PROCESS_STATUSES = new Set(['SENT_TO_KITCHEN', 'PREPARING', 'READY'])
 const ORDER_DELIVERED_STATUSES = new Set(['DELIVERED'])
@@ -195,6 +235,11 @@ export default function PosPage() {
       .filter((order) => order.status !== 'CLOSED' && order.status !== 'CANCELLED')
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }, [orders, selectedOperationalTableId, selectedTable])
+
+  const qrOrdersByGuest = useMemo(
+    () => summarizeQrOrdersByGuest(selectedTableQrOrders),
+    [selectedTableQrOrders],
+  )
 
   const liveOrders = useMemo(
     () => orders.filter((order) => order.status !== 'CLOSED' && order.status !== 'CANCELLED'),
@@ -328,9 +373,14 @@ export default function PosPage() {
     [tableCards, selectedTableId],
   )
 
-  const personSubtotals = useMemo(
+  const draftPersonSubtotals = useMemo(
     () => persons.map((person) => subtotalOfPerson(person, mainMap, entryMap, beverageMap)),
     [persons, mainMap, entryMap, beverageMap],
+  )
+
+  const personSubtotals = useMemo(
+    () => draftPersonSubtotals.map((subtotal, index) => subtotal + Number(qrOrdersByGuest.get(index + 1)?.total || 0)),
+    [draftPersonSubtotals, qrOrdersByGuest],
   )
 
   const totalAmount = useMemo(
@@ -440,7 +490,13 @@ export default function PosPage() {
   function selectTable(table) {
     setSelectedTableId(table.id)
 
-    const initialPeople = Math.max(table.activeSession?.guestsActive || 1, 1)
+    const operationalTableId = table.operationalTableId || table.id
+    const highestQrGuestNumber = orders
+      .filter((order) => order.tableId === operationalTableId && order.source === 'QR')
+      .filter((order) => order.status !== 'CLOSED' && order.status !== 'CANCELLED')
+      .reduce((max, order) => Math.max(max, Number(order.guestNumber || 0)), 0)
+
+    const initialPeople = Math.max(table.activeSession?.guestsActive || 1, highestQrGuestNumber, 1)
     const draft = Array.from({ length: initialPeople }, () => createPersonDraft())
     setPersons(draft)
     setComposeMode(false)
@@ -578,6 +634,7 @@ export default function PosPage() {
 
     const generatedItems = persons.flatMap((person, index) => {
       const guestNumber = index + 1
+      const linkedQrGuestSessionId = qrOrdersByGuest.get(guestNumber)?.guestSessionId || null
       const extraEntryIds = person.extraEntryEnabled ? person.extraEntryIds.filter(Boolean) : []
       const beverageIds = person.beverageEnabled ? person.beverageIds.filter(Boolean) : []
       const extraIds = [...extraEntryIds, ...beverageIds]
@@ -602,6 +659,7 @@ export default function PosPage() {
           quantity: 1,
           variant: main?.variants?.[0] || 'normal',
           guestNumber,
+          guestSessionId: linkedQrGuestSessionId || undefined,
           serviceMode: 'DINE_IN',
           notes: notesParts.join(' | '),
           extras: mergeIdsWithQty(extraIds),
@@ -618,6 +676,7 @@ export default function PosPage() {
           quantity: extraLine.quantity,
           variant: 'normal',
           guestNumber,
+          guestSessionId: linkedQrGuestSessionId || undefined,
           serviceMode: 'DINE_IN',
           notes: customNote ? `Detalle: ${customNote}` : '',
           extras: [],
@@ -681,22 +740,15 @@ export default function PosPage() {
     }
   }
 
-  async function approveQrOrder(order) {
+  async function dispatchQrOrder(order) {
     try {
-      await approveQrOrderMutation.mutateAsync(order.id)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['orders'] }),
-        queryClient.invalidateQueries({ queryKey: ['tables'] }),
-      ])
-      toast.success(`Pedido QR aprobado: ${order.id.slice(0, 8)}`)
-    } catch (error) {
-      toast.error(error.message)
-    }
-  }
+      const mustApprove = order.status === 'PENDING_WAITER_APPROVAL'
+      if (mustApprove) {
+        await approveQrOrderMutation.mutateAsync(order.id)
+      }
 
-  async function sendQrOrderToKitchen(order) {
-    try {
       const result = await sendKitchenMutation.mutateAsync(order.id)
+
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['orders'] }),
         queryClient.invalidateQueries({ queryKey: ['tables'] }),
@@ -714,9 +766,13 @@ export default function PosPage() {
       }
 
       toast.success(
-        pdfGenerated
-          ? `Pedido QR enviado a cocina: ${order.id.slice(0, 8)} (comanda PDF)`
-          : `Pedido QR enviado a cocina: ${order.id.slice(0, 8)}`,
+        mustApprove
+          ? (pdfGenerated
+            ? `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)} (comanda PDF)`
+            : `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)}`)
+          : (pdfGenerated
+            ? `Pedido QR enviado a cocina: ${order.id.slice(0, 8)} (comanda PDF)`
+            : `Pedido QR enviado a cocina: ${order.id.slice(0, 8)}`),
       )
     } catch (error) {
       toast.error(error.message)
@@ -1098,10 +1154,10 @@ export default function PosPage() {
               <Stack alignItems={{ xs: 'flex-start', sm: 'center' }} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
                 <Box>
                   <Typography sx={{ color: ORDER_PANEL_COLORS.ink, fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>
-                    Pedidos QR en espera
+                    Pedidos QR vinculados
                   </Typography>
                   <Typography sx={{ mt: 0.5, color: ORDER_PANEL_COLORS.muted, fontSize: 14 }}>
-                    Revisa primero los pedidos enviados por cliente antes de confirmar nuevos platos.
+                    Cada pedido QR queda asociado a su persona. Desde aqui puedes enviarlo a cocina y completar extras del mozo abajo.
                   </Typography>
                 </Box>
                 <Chip
@@ -1163,38 +1219,38 @@ export default function PosPage() {
                           <Typography sx={{ color: ORDER_PANEL_COLORS.muted, fontSize: 13 }}>
                             Total: {formatMoney(order.totals?.total || 0)}
                           </Typography>
+                          {!!order.items?.length && (
+                            <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mt: 1 }}>
+                              {order.items.slice(0, 4).map((item) => (
+                                <Chip
+                                  key={item.id}
+                                  label={normalizeLabel(item.productName)}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: ORDER_PANEL_COLORS.soft,
+                                    color: ORDER_PANEL_COLORS.ink,
+                                    fontWeight: 700,
+                                  }}
+                                />
+                              ))}
+                            </Stack>
+                          )}
                         </Box>
                         <Stack direction="row" spacing={1}>
-                          {order.status === 'PENDING_WAITER_APPROVAL' && (
+                          {(order.status === 'PENDING_WAITER_APPROVAL' || order.status === 'APPROVED') && (
                             <MuiButton
                               disabled={isConfirming}
-                              onClick={() => approveQrOrder(order)}
+                              onClick={() => dispatchQrOrder(order)}
                               size="small"
                               sx={{
-                                bgcolor: ORDER_PANEL_COLORS.primary,
+                                bgcolor: order.status === 'PENDING_WAITER_APPROVAL' ? ORDER_PANEL_COLORS.primary : ORDER_PANEL_COLORS.success,
                                 borderRadius: '12px',
                                 px: 2,
-                                '&:hover': { bgcolor: '#7f0d24' },
+                                '&:hover': { bgcolor: order.status === 'PENDING_WAITER_APPROVAL' ? '#7f0d24' : '#267245' },
                               }}
                               variant="contained"
                             >
-                              Aprobar
-                            </MuiButton>
-                          )}
-                          {order.status === 'APPROVED' && (
-                            <MuiButton
-                              disabled={isConfirming}
-                              onClick={() => sendQrOrderToKitchen(order)}
-                              size="small"
-                              sx={{
-                                bgcolor: ORDER_PANEL_COLORS.success,
-                                borderRadius: '12px',
-                                px: 2,
-                                '&:hover': { bgcolor: '#267245' },
-                              }}
-                              variant="contained"
-                            >
-                              Enviar a cocina
+                              {order.status === 'PENDING_WAITER_APPROVAL' ? 'Aprobar y enviar' : 'Enviar a cocina'}
                             </MuiButton>
                           )}
                         </Stack>
@@ -1207,9 +1263,11 @@ export default function PosPage() {
 
             {persons.map((person, index) => {
               const personNumber = index + 1
+              const linkedQrSummary = qrOrdersByGuest.get(personNumber) || null
               const extraCount =
                 (person.extraEntryEnabled ? person.extraEntryIds.filter(Boolean).length : 0) +
                 (person.beverageEnabled ? person.beverageIds.filter(Boolean).length : 0)
+              const draftSubtotal = draftPersonSubtotals[index] || 0
               const subtotal = personSubtotals[index] || 0
 
               return (
@@ -1260,7 +1318,9 @@ export default function PosPage() {
                           Persona {personNumber}
                         </Typography>
                         <Typography sx={{ mt: 0.35, color: ORDER_PANEL_COLORS.muted, fontSize: 13 }}>
-                          {extraCount > 0 ? `${extraCount} extra(s) anadidos` : 'Sin extras'}
+                          {linkedQrSummary
+                            ? `QR vinculado ${formatMoney(linkedQrSummary.total)}${extraCount > 0 ? ` · ${extraCount} extra(s) anadidos` : ''}`
+                            : (extraCount > 0 ? `${extraCount} extra(s) anadidos` : 'Sin extras')}
                         </Typography>
                       </Box>
                     </Stack>
@@ -1278,6 +1338,25 @@ export default function PosPage() {
                   </Box>
 
                   <div className="person-body person-body-modern">
+                    {linkedQrSummary && (
+                      <Box
+                        sx={{
+                          mb: 1.25,
+                          p: 1.25,
+                          borderRadius: '16px',
+                          border: `1px solid ${ORDER_PANEL_COLORS.line}`,
+                          background: ORDER_PANEL_COLORS.soft,
+                        }}
+                      >
+                        <Typography sx={{ color: ORDER_PANEL_COLORS.ink, fontSize: 14, fontWeight: 800 }}>
+                          Pedido QR de Persona {personNumber}
+                        </Typography>
+                        <Typography sx={{ mt: 0.35, color: ORDER_PANEL_COLORS.muted, fontSize: 13 }}>
+                          {linkedQrSummary.itemLabels.join(' · ') || 'Pedido QR registrado'} · {formatMoney(linkedQrSummary.total)}
+                        </Typography>
+                      </Box>
+                    )}
+
                     <div className="form-grid-2 person-main-grid person-main-grid-modern">
                       <TextField
                         fullWidth
@@ -1523,6 +1602,11 @@ export default function PosPage() {
                       <span>Subtotal estimado:</span>
                       <strong>{formatMoney(subtotal)}</strong>
                     </div>
+                    {linkedQrSummary && (
+                      <Typography sx={{ mt: 0.5, color: ORDER_PANEL_COLORS.muted, fontSize: 12 }}>
+                        QR {formatMoney(linkedQrSummary.total)} + nuevo del mozo {formatMoney(draftSubtotal)}
+                      </Typography>
+                    )}
                   </div>
                 </Paper>
               )
@@ -1569,18 +1653,30 @@ export default function PosPage() {
                 </Typography>
               </Box>
 
-              <Stack divider={<Divider flexItem sx={{ borderColor: ORDER_PANEL_COLORS.line }} />} spacing={0} sx={{ px: 2, py: 1.25 }}>
-                {persons.map((person, index) => (
-                  <Stack alignItems="center" direction="row" justifyContent="space-between" key={`summary-${person.id}`} sx={{ py: 0.9 }}>
-                    <Typography sx={{ color: ORDER_PANEL_COLORS.muted, fontSize: 14, fontWeight: 600 }}>
-                      Persona {index + 1}
-                    </Typography>
-                    <Typography sx={{ color: ORDER_PANEL_COLORS.ink, fontSize: 15, fontWeight: 700 }}>
-                      {formatMoney(personSubtotals[index] || 0)}
-                    </Typography>
-                  </Stack>
-                ))}
-              </Stack>
+                <Stack divider={<Divider flexItem sx={{ borderColor: ORDER_PANEL_COLORS.line }} />} spacing={0} sx={{ px: 2, py: 1.25 }}>
+                  {persons.map((person, index) => {
+                    const linkedQrSummary = qrOrdersByGuest.get(index + 1) || null
+                    const draftSubtotal = draftPersonSubtotals[index] || 0
+
+                    return (
+                      <Stack alignItems="center" direction="row" justifyContent="space-between" key={`summary-${person.id}`} sx={{ py: 0.9 }}>
+                        <Box>
+                          <Typography sx={{ color: ORDER_PANEL_COLORS.muted, fontSize: 14, fontWeight: 600 }}>
+                            Persona {index + 1}
+                          </Typography>
+                          {linkedQrSummary && (
+                            <Typography sx={{ color: ORDER_PANEL_COLORS.muted, fontSize: 12 }}>
+                              QR {formatMoney(linkedQrSummary.total)} + mozo {formatMoney(draftSubtotal)}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography sx={{ color: ORDER_PANEL_COLORS.ink, fontSize: 15, fontWeight: 700 }}>
+                          {formatMoney(personSubtotals[index] || 0)}
+                        </Typography>
+                      </Stack>
+                    )
+                  })}
+                </Stack>
 
               <Box
                 sx={{

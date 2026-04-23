@@ -36,7 +36,7 @@ const allowedOrigins = String(process.env.ALLOWED_ORIGINS || 'http://localhost:5
 const allowAnyOrigin = allowedOrigins.includes('*')
 const socketAllowedOrigins = allowAnyOrigin ? true : allowedOrigins
 const allowedMethods = ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
-const allowedHeaders = ['Content-Type', 'Authorization', 'X-QR-Token']
+const allowedHeaders = ['Content-Type', 'Authorization', 'X-QR-Token', 'X-QR-Guest-Token']
 
 function corsOriginResolver(origin, callback) {
   if (allowAnyOrigin || !origin || allowedOrigins.includes(origin)) {

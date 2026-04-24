@@ -239,6 +239,8 @@ router.patch(
     const payload = sendKitchenBatchSchema.parse(req.body)
     const uniqueIds = Array.from(new Set(payload.orderIds))
     const results = uniqueIds.map((orderId) => db.sendOrderToKitchen(orderId))
+    let mergedPrintDispatch = null
+    let ticketDispatches = []
 
     let mergedTicket = null
     if (payload.mergePrint) {
@@ -255,9 +257,13 @@ router.patch(
           })),
         ),
       }
-      enqueueKitchenPrint(mergedTicket)
+      mergedPrintDispatch = enqueueKitchenPrint(mergedTicket)
     } else {
-      results.forEach((result) => enqueueKitchenPrint(result.ticket))
+      ticketDispatches = results.map((result) => ({
+        orderId: result.order.id,
+        ticketId: result.ticket.id,
+        ...enqueueKitchenPrint(result.ticket),
+      }))
     }
 
     results.forEach((result) => {
@@ -269,6 +275,8 @@ router.patch(
       orders: results.map((result) => result.order),
       tickets: results.map((result) => result.ticket),
       mergedTicket,
+      mergedPrintDispatch,
+      ticketDispatches,
     })
   }),
 )
@@ -319,12 +327,15 @@ router.patch(
   requireAuth,
   asyncRoute(async (req, res) => {
     const result = db.sendOrderToKitchen(req.params.id)
-    enqueueKitchenPrint(result.ticket)
+    const printDispatch = enqueueKitchenPrint(result.ticket)
 
     emitEvent('order.updated', result.order)
     emitEvent('kitchen.ticket.updated', result.ticket)
 
-    return res.json(result)
+    return res.json({
+      ...result,
+      printDispatch,
+    })
   }),
 )
 

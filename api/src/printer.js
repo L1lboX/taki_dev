@@ -38,11 +38,25 @@ function processOneJob() {
 }
 
 export function enqueueKitchenPrint(ticket) {
+  const settings = db.getRestaurantPrinterSettings()
+
+  if (!settings.kitchenEnabled || !settings.autoPrintOnSend) {
+    return {
+      queued: false,
+      settings,
+    }
+  }
+
   db.createPrinterJob(ticket.id, {
     ticketId: ticket.id,
     tableId: ticket.tableId,
     items: ticket.items,
   })
+
+  return {
+    queued: true,
+    settings,
+  }
 }
 
 export function startPrinterWorker() {

@@ -6,6 +6,17 @@ import { db } from '../store.js'
 
 const router = Router()
 
+const printerSchema = z.object({
+  kitchenEnabled: z.boolean().optional(),
+  autoPrintOnSend: z.boolean().optional(),
+  connectionType: z.enum(['LOCAL', 'NETWORK', 'SYSTEM']).optional(),
+  printerName: z.string().trim().optional(),
+  host: z.string().trim().optional(),
+  port: z.union([z.string().trim(), z.number()]).optional(),
+  paperWidth: z.enum(['58mm', '80mm']).optional(),
+  fallbackToPdf: z.boolean().optional(),
+})
+
 const updateSchema = z.object({
   name: z.string().trim().min(2).optional(),
   legalName: z.string().trim().optional(),
@@ -16,6 +27,10 @@ const updateSchema = z.object({
   phone: z.string().trim().optional(),
   logoUrl: z.string().trim().optional(),
   primaryColor: z.string().trim().optional(),
+  profileEmail: z.string().trim().optional(),
+  profileWebsite: z.string().trim().optional(),
+  profileDescription: z.string().trim().optional(),
+  printers: printerSchema.optional(),
 })
 
 router.get(

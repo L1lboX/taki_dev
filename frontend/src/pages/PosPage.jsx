@@ -85,6 +85,19 @@ function subtotalOfPerson(person, mainMap, entryMap, beverageMap) {
   return Number(subtotal.toFixed(2))
 }
 
+async function downloadTicketIfFallbackEnabled(ticket, tableNumber, printDispatch) {
+  if (!ticket?.id) return false
+  if (printDispatch?.queued === true) return false
+  if (!printDispatch?.settings?.fallbackToPdf) return false
+
+  try {
+    await downloadKitchenTicketPdf(ticket, { tableNumber })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function summarizeQrOrdersByGuest(orders) {
   const grouped = new Map()
 
@@ -720,20 +733,19 @@ export default function PosPage() {
 
       setPersons((prev) => prev.map(() => createPersonDraft()))
 
-      let pdfGenerated = false
-      if (kitchenResult?.ticket) {
-        try {
-          await downloadKitchenTicketPdf(kitchenResult.ticket, { tableNumber: selectedTable.number })
-          pdfGenerated = true
-        } catch {
-          pdfGenerated = false
-        }
-      }
+      const printQueued = kitchenResult?.printDispatch?.queued === true
+      const pdfGenerated = await downloadTicketIfFallbackEnabled(
+        kitchenResult?.ticket,
+        selectedTable.number,
+        kitchenResult?.printDispatch,
+      )
 
       toast.success(
-        pdfGenerated
-          ? 'Pedido confirmado, enviado a cocina y comanda PDF generada'
-          : 'Pedido confirmado y enviado a cocina',
+        printQueued
+          ? 'Pedido confirmado y enviado a cocina para impresion'
+          : (pdfGenerated
+            ? 'Pedido confirmado, enviado a cocina y comanda descargada'
+            : 'Pedido confirmado y enviado a cocina'),
       )
     } catch (error) {
       toast.error(error.message)
@@ -755,24 +767,25 @@ export default function PosPage() {
         queryClient.invalidateQueries({ queryKey: ['tickets'] }),
       ])
 
-      let pdfGenerated = false
-      if (result?.ticket) {
-        try {
-          await downloadKitchenTicketPdf(result.ticket, { tableNumber: selectedTable?.number || '-' })
-          pdfGenerated = true
-        } catch {
-          pdfGenerated = false
-        }
-      }
+      const printQueued = result?.printDispatch?.queued === true
+      const pdfGenerated = await downloadTicketIfFallbackEnabled(
+        result?.ticket,
+        selectedTable?.number || '-',
+        result?.printDispatch,
+      )
 
       toast.success(
         mustApprove
-          ? (pdfGenerated
-            ? `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)} (comanda PDF)`
-            : `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)}`)
-          : (pdfGenerated
-            ? `Pedido QR enviado a cocina: ${order.id.slice(0, 8)} (comanda PDF)`
-            : `Pedido QR enviado a cocina: ${order.id.slice(0, 8)}`),
+          ? (printQueued
+            ? `Pedido QR aprobado y enviado a cocina para impresion: ${order.id.slice(0, 8)}`
+            : (pdfGenerated
+              ? `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)} (comanda descargada)`
+              : `Pedido QR aprobado y enviado a cocina: ${order.id.slice(0, 8)}`))
+          : (printQueued
+            ? `Pedido QR enviado a cocina para impresion: ${order.id.slice(0, 8)}`
+            : (pdfGenerated
+              ? `Pedido QR enviado a cocina: ${order.id.slice(0, 8)} (comanda descargada)`
+              : `Pedido QR enviado a cocina: ${order.id.slice(0, 8)}`)),
       )
     } catch (error) {
       toast.error(error.message)
@@ -796,15 +809,20 @@ export default function PosPage() {
         queryClient.invalidateQueries({ queryKey: ['tickets'] }),
       ])
 
-      if (result?.mergedTicket) {
-        try {
-          await downloadKitchenTicketPdf(result.mergedTicket, { tableNumber: selectedTable?.number || '-' })
-        } catch {
-          // dejamos continuar sin bloquear la operacion
-        }
-      }
+      const printQueued = result?.mergedPrintDispatch?.queued === true
+      const pdfGenerated = await downloadTicketIfFallbackEnabled(
+        result?.mergedTicket,
+        selectedTable?.number || '-',
+        result?.mergedPrintDispatch,
+      )
 
-      toast.success(`Se enviaron ${approvedOrders.length} pedidos QR en una sola comanda`)
+      toast.success(
+        printQueued
+          ? `Se enviaron ${approvedOrders.length} pedidos QR en una sola comanda para impresion`
+          : (pdfGenerated
+            ? `Se enviaron ${approvedOrders.length} pedidos QR y se descargo la comanda`
+            : `Se enviaron ${approvedOrders.length} pedidos QR en una sola comanda`),
+      )
     } catch (error) {
       toast.error(error.message || 'No se pudieron enviar las comandas juntas')
     }

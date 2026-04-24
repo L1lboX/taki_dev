@@ -449,7 +449,7 @@ function hydrateFromSnapshot(snapshot) {
     financeAccounts: clone(asArray(snapshot.financeAccounts)),
     financeTransactions: clone(asArray(snapshot.financeTransactions)),
     cashClosures: clone(asArray(snapshot.cashClosures)),
-    restaurant: clone(snapshot.restaurant || defaultRestaurantSettings()),
+    restaurant: normalizeRestaurantSettings(snapshot.restaurant),
   }
 }
 
@@ -609,6 +609,42 @@ function normalizeMoney(value) {
   return Number(amount.toFixed(2))
 }
 
+function defaultRestaurantPrinterSettings() {
+  return {
+    kitchenEnabled: true,
+    autoPrintOnSend: true,
+    connectionType: 'LOCAL',
+    printerName: '',
+    host: '',
+    port: '9100',
+    paperWidth: '80mm',
+    fallbackToPdf: false,
+  }
+}
+
+function normalizeRestaurantPrinterSettings(rawValue) {
+  const defaults = defaultRestaurantPrinterSettings()
+  const raw = rawValue && typeof rawValue === 'object' ? rawValue : {}
+  const next = {
+    ...defaults,
+    ...raw,
+  }
+
+  const connectionType = String(next.connectionType || defaults.connectionType).trim().toUpperCase()
+  const paperWidth = String(next.paperWidth || defaults.paperWidth).trim().toLowerCase()
+
+  next.kitchenEnabled = next.kitchenEnabled !== false
+  next.autoPrintOnSend = next.autoPrintOnSend !== false
+  next.connectionType = ['LOCAL', 'NETWORK', 'SYSTEM'].includes(connectionType) ? connectionType : defaults.connectionType
+  next.printerName = String(next.printerName || '').trim()
+  next.host = String(next.host || '').trim()
+  next.port = String(next.port || defaults.port).trim() || defaults.port
+  next.paperWidth = ['58mm', '80mm'].includes(paperWidth) ? paperWidth : defaults.paperWidth
+  next.fallbackToPdf = Boolean(next.fallbackToPdf)
+
+  return next
+}
+
 function defaultRestaurantSettings() {
   return {
     name: 'TAKI RESTAURANT',
@@ -620,6 +656,33 @@ function defaultRestaurantSettings() {
     phone: '',
     logoUrl: '',
     primaryColor: '#1b4332',
+    profileEmail: '',
+    profileWebsite: '',
+    profileDescription: '',
+    printers: defaultRestaurantPrinterSettings(),
+  }
+}
+
+function normalizeRestaurantSettings(rawValue) {
+  const defaults = defaultRestaurantSettings()
+  const raw = rawValue && typeof rawValue === 'object' ? rawValue : {}
+
+  return {
+    ...defaults,
+    ...raw,
+    name: String(raw.name || defaults.name).trim() || defaults.name,
+    legalName: String(raw.legalName || '').trim(),
+    taxId: String(raw.taxId || '').trim(),
+    currency: String(raw.currency || defaults.currency).trim().toUpperCase() || defaults.currency,
+    timezone: String(raw.timezone || defaults.timezone).trim() || defaults.timezone,
+    address: String(raw.address || '').trim(),
+    phone: String(raw.phone || '').trim(),
+    logoUrl: String(raw.logoUrl || '').trim(),
+    primaryColor: String(raw.primaryColor || defaults.primaryColor).trim() || defaults.primaryColor,
+    profileEmail: String(raw.profileEmail || '').trim(),
+    profileWebsite: String(raw.profileWebsite || '').trim(),
+    profileDescription: String(raw.profileDescription || '').trim(),
+    printers: normalizeRestaurantPrinterSettings(raw.printers),
   }
 }
 
@@ -670,7 +733,7 @@ function ensureBusinessState() {
   if (!Array.isArray(state.financeAccounts)) state.financeAccounts = defaultFinanceAccounts()
   if (!Array.isArray(state.financeTransactions)) state.financeTransactions = []
   if (!Array.isArray(state.cashClosures)) state.cashClosures = []
-  if (!state.restaurant || typeof state.restaurant !== 'object') state.restaurant = defaultRestaurantSettings()
+  state.restaurant = normalizeRestaurantSettings(state.restaurant)
 
   state.users = asArray(state.users).map((user) => ({
     ...user,
@@ -2877,23 +2940,22 @@ db.getRestaurantSettings = function getRestaurantSettings() {
   return clone(state.restaurant)
 }
 
+db.getRestaurantPrinterSettings = function getRestaurantPrinterSettings() {
+  ensureBusinessState()
+  return clone(state.restaurant.printers)
+}
+
 db.updateRestaurantSettings = function updateRestaurantSettings(payload) {
   ensureBusinessState()
 
-  const next = {
+  const next = normalizeRestaurantSettings({
     ...state.restaurant,
     ...(payload || {}),
-  }
-
-  next.name = String(next.name || '').trim() || state.restaurant.name
-  next.currency = String(next.currency || '').trim().toUpperCase() || 'PEN'
-  next.timezone = String(next.timezone || '').trim() || 'America/Lima'
-  next.taxId = String(next.taxId || '').trim()
-  next.legalName = String(next.legalName || '').trim()
-  next.address = String(next.address || '').trim()
-  next.phone = String(next.phone || '').trim()
-  next.logoUrl = String(next.logoUrl || '').trim()
-  next.primaryColor = String(next.primaryColor || '').trim() || '#1b4332'
+    printers: {
+      ...(state.restaurant?.printers || defaultRestaurantPrinterSettings()),
+      ...((payload?.printers && typeof payload.printers === 'object') ? payload.printers : {}),
+    },
+  })
 
   state.restaurant = next
   return clone(state.restaurant)

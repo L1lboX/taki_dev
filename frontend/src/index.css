@@ -1471,6 +1471,159 @@ textarea:focus {
   transition: all 0.16s ease;
 }
 
+.restaurant-settings-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.restaurant-settings-head {
+  margin-bottom: 12px;
+}
+
+.restaurant-settings-tabs {
+  margin-bottom: 18px;
+}
+
+.restaurant-settings-form {
+  display: grid;
+  gap: 20px;
+}
+
+.restaurant-settings-grid {
+  gap: 14px;
+}
+
+.restaurant-settings-kicker {
+  margin: 0 0 8px;
+  color: var(--txt3);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.restaurant-settings-printer-layout,
+.restaurant-settings-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.restaurant-settings-printer-summary,
+.restaurant-settings-profile-preview {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(64, 145, 108, 0.12), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 243, 238, 0.94));
+  box-shadow: 0 12px 32px rgba(35, 30, 24, 0.06);
+}
+
+.restaurant-settings-printer-summary h4 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.restaurant-settings-printer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.restaurant-settings-printer-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.restaurant-settings-toggle-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.restaurant-settings-toggle-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.restaurant-settings-toggle-card input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--green-mid);
+}
+
+.restaurant-settings-toggle-card span {
+  display: grid;
+  gap: 4px;
+}
+
+.restaurant-settings-toggle-card strong {
+  color: var(--txt);
+  font-size: 14px;
+}
+
+.restaurant-settings-toggle-card small {
+  color: var(--txt2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.restaurant-settings-profile-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(27, 67, 50, 0.12);
+}
+
+.restaurant-settings-profile-card p {
+  margin: 6px 0 0;
+  color: var(--txt2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.restaurant-settings-profile-swatch {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.restaurant-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .restaurant-settings-printer-layout,
+  .restaurant-settings-profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .restaurant-settings-actions {
+    justify-content: stretch;
+  }
+
+  .restaurant-settings-actions .btn {
+    width: 100%;
+  }
+}
+
 .pos-orders-tab:hover {
   background: #edf0f7;
   color: var(--txt);

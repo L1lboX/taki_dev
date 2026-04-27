@@ -3,46 +3,46 @@
 export const PureLightTheme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#1b4332' },
-    secondary: { main: '#2f4774' },
+    primary: { main: '#B8422E' },
+    secondary: { main: '#1A1C1E' },
     error: { main: '#c0392b' },
     background: {
-      default: '#f6f3ee',
-      paper: '#ffffff',
+      default: '#F7F5F2',
+      paper: '#fffdf9',
     },
     text: {
-      primary: '#1a140f',
-      secondary: '#6b5d50',
+      primary: '#1A1C1E',
+      secondary: '#6C7278',
     },
   },
   shape: {
-    borderRadius: 12,
+    borderRadius: 8,
   },
   typography: {
-    fontFamily: 'DM Sans, sans-serif',
+    fontFamily: 'Public Sans, sans-serif',
   },
 })
 
 export const NebulaFighterTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#95d5b2' },
-    secondary: { main: '#9bb2df' },
+    primary: { main: '#d65b45' },
+    secondary: { main: '#F7F5F2' },
     error: { main: '#ff7b72' },
     background: {
-      default: '#0d1424',
-      paper: '#18243c',
+      default: '#111315',
+      paper: '#1A1C1E',
     },
     text: {
-      primary: '#eef2ff',
-      secondary: '#b2bfd6',
+      primary: '#F7F5F2',
+      secondary: '#c4c7ca',
     },
   },
   shape: {
-    borderRadius: 12,
+    borderRadius: 8,
   },
   typography: {
-    fontFamily: 'DM Sans, sans-serif',
+    fontFamily: 'Public Sans, sans-serif',
   },
 })
 

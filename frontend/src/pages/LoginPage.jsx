@@ -38,13 +38,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-shell px-4">
+    <div className="auth-shell">
+      <section className="auth-hero" aria-label="TAKI POS">
+        <div className="auth-hero-copy">
+          <p className="auth-kicker">Restaurante / Operacion</p>
+          <h1 className="auth-title">TAKI POS</h1>
+          <p className="auth-subtitle">Panel privado para sala, cocina y caja.</p>
+        </div>
+        <div className="auth-plate" aria-hidden="true">
+          <span className="auth-plate-rule" />
+          <span className="auth-plate-mark">T</span>
+          <span className="auth-plate-meta">Heritage System</span>
+        </div>
+      </section>
+
       <form autoComplete="off" className="auth-card" onSubmit={onSubmit}>
         <div className="auth-copy">
-          <span className="auth-brand">TAKI POS</span>
-          <p className="auth-kicker">Acceso seguro</p>
-          <h1 className="auth-title">Iniciar sesion</h1>
-          <p className="auth-subtitle">Ingresa tus credenciales para continuar.</p>
+          <span className="auth-brand">Acceso seguro</span>
+          <h2 className="auth-form-title">Iniciar sesion</h2>
+          <p className="auth-form-subtitle">Ingresa tus credenciales para continuar.</p>
         </div>
 
         <div className="auth-field">
@@ -58,7 +70,7 @@ export default function LoginPage() {
             id="login-username"
             name="taki-login-user"
             onChange={(event) => setUsername(event.target.value)}
-            placeholder="Tu usuario"
+            placeholder="usuario"
             spellCheck={false}
             type="text"
             value={username}
@@ -75,7 +87,7 @@ export default function LoginPage() {
             id="login-password"
             name="taki-login-password"
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Tu contrasena"
+            placeholder="contrasena"
             type="password"
             value={password}
           />

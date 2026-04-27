@@ -30,7 +30,14 @@ const createTxSchema = z.object({
   toAccountId: z.string().optional(),
   note: z.string().trim().optional().default(''),
   reference: z.string().trim().optional().default(''),
+  category: z.string().trim().optional().default(''),
   source: z.string().trim().optional().default('MANUAL'),
+})
+
+const registerSalesSchema = z.object({
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+  accountId: z.string().trim().min(1),
+  note: z.string().trim().optional().default(''),
 })
 
 router.get(
@@ -80,6 +87,18 @@ router.get(
   }),
 )
 
+router.get(
+  '/summary',
+  requireAuth,
+  requireRoles(ROLES.ACCOUNTANT, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const date = req.query.date?.toString()
+    const month = req.query.month?.toString()
+    const timezone = req.query.timezone?.toString()
+    return res.json(db.getFinanceSummary({ date, month, timezone }))
+  }),
+)
+
 router.post(
   '/transactions',
   requireAuth,
@@ -87,6 +106,17 @@ router.post(
   asyncRoute(async (req, res) => {
     const payload = createTxSchema.parse(req.body)
     const tx = db.createFinanceTransaction(payload, req.user.id)
+    return res.status(201).json(tx)
+  }),
+)
+
+router.post(
+  '/transactions/register-sales',
+  requireAuth,
+  requireRoles(ROLES.ACCOUNTANT, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const payload = registerSalesSchema.parse(req.body)
+    const tx = db.registerDailySalesFinanceTransaction(payload, req.user.id)
     return res.status(201).json(tx)
   }),
 )

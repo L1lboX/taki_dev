@@ -3657,6 +3657,54 @@ db.listFinanceTransactions = function listFinanceTransactions({ from, to, accoun
   return clone(rows)
 }
 
+db.getFinanceSummary = function getFinanceSummary({ date, month, timezone } = {}) {
+  ensureBusinessState()
+  const kpiTimeZone = resolveKpiTimeZone(timezone)
+  const dateKey = normalizeDateKeyInput(date, kpiTimeZone)
+  const monthKey = normalizeMonthKeyInput(month || dateKey.slice(0, 7), kpiTimeZone)
+  const monthRange = buildMonthRange(monthKey)
+
+  const todayOrders = this.getClosedOrdersByDateRange({
+    from: dateKey,
+    to: dateKey,
+    timezone: kpiTimeZone,
+  })
+  const monthOrders = this.getClosedOrdersByDateRange({
+    from: monthRange.from,
+    to: monthRange.to,
+    timezone: kpiTimeZone,
+  })
+
+  const todaySales = normalizeMoney(todayOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
+  const monthSales = normalizeMoney(monthOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
+  const monthManualIncome = normalizeMoney(
+    state.financeTransactions
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.source !== 'SALES_DAILY')
+      .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
+      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+  )
+  const monthExpenses = normalizeMoney(
+    state.financeTransactions
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.EXPENSE)
+      .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
+      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+  )
+  const registeredTodaySales = state.financeTransactions.find(
+    (tx) => tx.source === 'SALES_DAILY' && tx.reference === `VENTAS-${dateKey}`,
+  )
+
+  return {
+    date: dateKey,
+    month: monthKey,
+    todaySales,
+    monthSales,
+    monthManualIncome,
+    monthExpenses,
+    projectedBalance: normalizeMoney(monthSales + monthManualIncome - monthExpenses),
+    registeredTodaySales: registeredTodaySales ? clone(registeredTodaySales) : null,
+  }
+}
+
 db.createFinanceTransaction = function createFinanceTransaction(payload, createdByUserId) {
   ensureBusinessState()
 
@@ -3674,6 +3722,7 @@ db.createFinanceTransaction = function createFinanceTransaction(payload, created
     toAccountId: null,
     note: String(payload?.note || '').trim(),
     reference: String(payload?.reference || '').trim(),
+    category: String(payload?.category || '').trim().toUpperCase(),
     source: String(payload?.source || 'MANUAL').trim().toUpperCase(),
     createdByUserId,
     createdAt: nowIso(),
@@ -3718,6 +3767,35 @@ db.createFinanceTransaction = function createFinanceTransaction(payload, created
 
   state.financeTransactions.push(transaction)
   return clone(transaction)
+}
+
+db.registerDailySalesFinanceTransaction = function registerDailySalesFinanceTransaction(payload, createdByUserId) {
+  ensureBusinessState()
+  const dateKey = normalizeDateKeyInput(payload?.date, resolveKpiTimeZone())
+  const reference = `VENTAS-${dateKey}`
+  const duplicated = state.financeTransactions.find((tx) => tx.source === 'SALES_DAILY' && tx.reference === reference)
+  if (duplicated) throw new Error('Las ventas de ese dia ya fueron registradas en finanzas')
+
+  const closedOrders = this.getClosedOrdersByDateRange({
+    from: dateKey,
+    to: dateKey,
+    timezone: resolveKpiTimeZone(),
+  })
+  const amount = normalizeMoney(closedOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
+  if (!(amount > 0)) throw new Error('No hay ventas cerradas para registrar en esa fecha')
+
+  return this.createFinanceTransaction(
+    {
+      type: FINANCE_TRANSACTION_TYPE.INCOME,
+      amount,
+      accountId: payload.accountId,
+      reference,
+      category: 'SALES',
+      source: 'SALES_DAILY',
+      note: payload.note || `Ventas cerradas del ${dateKey}`,
+    },
+    createdByUserId,
+  )
 }
 
 const mutatingMethods = new Set([
@@ -3777,6 +3855,7 @@ const mutatingMethods = new Set([
   'createFinanceAccount',
   'updateFinanceAccount',
   'createFinanceTransaction',
+  'registerDailySalesFinanceTransaction',
 ])
 
 for (const methodName of mutatingMethods) {

@@ -273,6 +273,16 @@ export const api = {
     return apiRequest(`/finance/transactions${query ? `?${query}` : ''}`)
   },
   createFinanceTransaction: (body) => apiRequest('/finance/transactions', { method: 'POST', body: JSON.stringify(body) }),
+  getFinanceSummary: ({ date, month, timezone } = {}) => {
+    const params = new URLSearchParams()
+    if (date) params.set('date', date)
+    if (month) params.set('month', month)
+    if (timezone) params.set('timezone', timezone)
+    const query = params.toString()
+    return apiRequest(`/finance/summary${query ? `?${query}` : ''}`)
+  },
+  registerDailySalesFinanceTransaction: (body) =>
+    apiRequest('/finance/transactions/register-sales', { method: 'POST', body: JSON.stringify(body) }),
 
   getMenuSections: ({ active } = {}) => {
     const params = new URLSearchParams()

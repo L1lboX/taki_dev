@@ -6,6 +6,48 @@ import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
 const TX_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER']
+const todayIso = new Date().toISOString().slice(0, 10)
+const currentMonthIso = todayIso.slice(0, 7)
+
+const TYPE_LABELS = {
+  INCOME: 'Ingreso',
+  EXPENSE: 'Egreso',
+  TRANSFER: 'Transferencia',
+}
+
+const INCOME_CATEGORIES = [
+  { value: 'SALES', label: 'Ventas del sistema' },
+  { value: 'LOAN', label: 'Prestamo recibido' },
+  { value: 'CAPITAL', label: 'Aporte de capital' },
+  { value: 'OTHER_INCOME', label: 'Otro ingreso' },
+]
+
+const EXPENSE_CATEGORIES = [
+  { value: 'SUPPLIES', label: 'Compras / insumos' },
+  { value: 'PAYROLL', label: 'Pago de personal' },
+  { value: 'EQUIPMENT', label: 'Activos / equipos' },
+  { value: 'SERVICES', label: 'Servicios' },
+  { value: 'DEBT_PAYMENT', label: 'Pago de deuda' },
+  { value: 'OTHER_EXPENSE', label: 'Otro egreso' },
+]
+
+function categoryOptionsFor(type) {
+  if (type === 'INCOME') return INCOME_CATEGORIES
+  if (type === 'EXPENSE') return EXPENSE_CATEGORIES
+  return []
+}
+
+function categoryLabel(value) {
+  const options = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+  return options.find((item) => item.value === value)?.label || value || '-'
+}
+
+function sourceLabel(value) {
+  const source = String(value || '').toUpperCase()
+  if (source === 'SALES_DAILY') return 'Ventas sistema'
+  if (source === 'MANUAL') return 'Manual'
+  return source || '-'
+}
 
 function formatMoney(value) {
   return `S/ ${Number(value || 0).toFixed(2)}`
@@ -25,11 +67,14 @@ export default function FinanceTransactionsPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [filters, setFilters] = useState({
-    from: '',
-    to: '',
+    from: `${currentMonthIso}-01`,
+    to: todayIso,
     accountId: '',
     type: '',
   })
+  const [summaryDate, setSummaryDate] = useState(todayIso)
+  const [summaryMonth, setSummaryMonth] = useState(currentMonthIso)
+  const [salesAccountId, setSalesAccountId] = useState('')
 
   const [form, setForm] = useState({
     type: 'INCOME',
@@ -39,6 +84,7 @@ export default function FinanceTransactionsPage() {
     toAccountId: '',
     note: '',
     reference: '',
+    category: 'OTHER_INCOME',
   })
 
   const accountsQuery = useQuery({
@@ -56,6 +102,11 @@ export default function FinanceTransactionsPage() {
     }),
   })
 
+  const summaryQuery = useQuery({
+    queryKey: scopedQueryKey('finance-summary', user, summaryDate, summaryMonth),
+    queryFn: () => api.getFinanceSummary({ date: summaryDate, month: summaryMonth }),
+  })
+
   const createMutation = useMutation({
     mutationFn: api.createFinanceTransaction,
     onSuccess: async () => {
@@ -67,6 +118,19 @@ export default function FinanceTransactionsPage() {
         reference: '',
       }))
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['finance-transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['finance-accounts'] }),
+      ])
+    },
+    onError: (error) => toast.error(error.message),
+  })
+
+  const registerSalesMutation = useMutation({
+    mutationFn: api.registerDailySalesFinanceTransaction,
+    onSuccess: async () => {
+      toast.success('Ventas del dia registradas como ingreso')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['finance-summary'] }),
         queryClient.invalidateQueries({ queryKey: ['finance-transactions'] }),
         queryClient.invalidateQueries({ queryKey: ['finance-accounts'] }),
       ])
@@ -90,6 +154,8 @@ export default function FinanceTransactionsPage() {
       amount,
       note: String(form.note || '').trim(),
       reference: String(form.reference || '').trim(),
+      category: String(form.category || '').trim(),
+      source: 'MANUAL',
     }
 
     if (form.type === 'TRANSFER') {
@@ -114,6 +180,28 @@ export default function FinanceTransactionsPage() {
   }
 
   const rows = transactionsQuery.data || []
+  const summary = summaryQuery.data || null
+  const categoryOptions = categoryOptionsFor(form.type)
+
+  function updateType(type) {
+    setForm((prev) => ({
+      ...prev,
+      type,
+      category: categoryOptionsFor(type)[0]?.value || '',
+    }))
+  }
+
+  function registerSales() {
+    if (!salesAccountId) {
+      toast.error('Selecciona la cuenta donde ingresaran las ventas')
+      return
+    }
+    registerSalesMutation.mutate({
+      date: summaryDate,
+      accountId: salesAccountId,
+      note: `Ingreso automatico por ventas cerradas del ${summaryDate}`,
+    })
+  }
 
   return (
     <div className="page-stack">
@@ -121,9 +209,68 @@ export default function FinanceTransactionsPage() {
         <div className="section-head">
           <div>
             <h2 className="section-title">Finanzas - Transacciones</h2>
-            <p className="section-subtitle">Registro gerencial de ingresos, egresos y transferencias entre cuentas.</p>
+            <p className="section-subtitle">Ingresos por ventas, prestamos o aportes; egresos por compras, planilla, activos y pagos.</p>
           </div>
           <span className="badge">Movimientos: {rows.length}</span>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <div>
+            <h3 className="section-title">Ventas del sistema</h3>
+            <p className="section-subtitle">Jala ventas cerradas y permite registrarlas como ingreso contable.</p>
+          </div>
+          {summary?.registeredTodaySales && <span className="badge">Ventas del dia registradas</span>}
+        </div>
+
+        <div className="finance-summary-grid" style={{ marginTop: 12 }}>
+          <div className="kpi-card">
+            <p className="kpi-label">Fecha de ventas</p>
+            <input onChange={(event) => setSummaryDate(event.target.value)} type="date" value={summaryDate} />
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-label">Mes acumulado</p>
+            <input onChange={(event) => setSummaryMonth(event.target.value)} type="month" value={summaryMonth} />
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-label">Venta del dia</p>
+            <p className="kpi-value">{formatMoney(summary?.todaySales || 0)}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-label">Ventas del mes</p>
+            <p className="kpi-value">{formatMoney(summary?.monthSales || 0)}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-label">Ingresos manuales del mes</p>
+            <p className="kpi-value">{formatMoney(summary?.monthManualIncome || 0)}</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-label">Egresos del mes</p>
+            <p className="kpi-value">{formatMoney(summary?.monthExpenses || 0)}</p>
+          </div>
+        </div>
+
+        <div className="form-grid-3" style={{ marginTop: 12 }}>
+          <div>
+            <label className="form-label">Cuenta destino para ventas</label>
+            <select onChange={(event) => setSalesAccountId(event.target.value)} value={salesAccountId}>
+              <option value="">Selecciona cuenta</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'end' }}>
+            <button
+              className="btn btn-main"
+              disabled={registerSalesMutation.isPending || Boolean(summary?.registeredTodaySales) || !(summary?.todaySales > 0)}
+              onClick={registerSales}
+              type="button"
+            >
+              Registrar ventas del dia
+            </button>
+          </div>
         </div>
       </section>
 
@@ -135,9 +282,9 @@ export default function FinanceTransactionsPage() {
         <form className="form-grid-3" onSubmit={submitCreate} style={{ marginTop: 12 }}>
           <div>
             <label className="form-label">Tipo</label>
-            <select onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))} value={form.type}>
+            <select onChange={(event) => updateType(event.target.value)} value={form.type}>
               {TX_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>{TYPE_LABELS[type]}</option>
               ))}
             </select>
           </div>
@@ -159,6 +306,17 @@ export default function FinanceTransactionsPage() {
                 <option value="">Selecciona cuenta</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {form.type !== 'TRANSFER' && (
+            <div>
+              <label className="form-label">Categoria</label>
+              <select onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))} value={form.category}>
+                {categoryOptions.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
             </div>
@@ -234,7 +392,7 @@ export default function FinanceTransactionsPage() {
             <select onChange={(event) => setFilters((prev) => ({ ...prev, type: event.target.value }))} value={filters.type}>
               <option value="">Todos</option>
               {TX_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>{TYPE_LABELS[type]}</option>
               ))}
             </select>
           </div>
@@ -259,6 +417,8 @@ export default function FinanceTransactionsPage() {
                 <tr>
                   <th>Fecha</th>
                   <th>Tipo</th>
+                  <th>Categoria</th>
+                  <th>Origen</th>
                   <th>Monto</th>
                   <th>Cuenta</th>
                   <th>Origen</th>
@@ -270,7 +430,9 @@ export default function FinanceTransactionsPage() {
                 {rows.map((row) => (
                   <tr key={row.id}>
                     <td>{formatDate(row.createdAt)}</td>
-                    <td>{row.type}</td>
+                    <td>{TYPE_LABELS[row.type] || row.type}</td>
+                    <td>{categoryLabel(row.category)}</td>
+                    <td>{sourceLabel(row.source)}</td>
                     <td>{formatMoney(row.amount)}</td>
                     <td>{accountById.get(row.accountId)?.name || '-'}</td>
                     <td>{accountById.get(row.fromAccountId)?.name || '-'}</td>

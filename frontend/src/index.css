@@ -1001,6 +1001,20 @@ textarea:focus {
   margin-top: 4px;
 }
 
+.finance-summary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.finance-summary-grid .kpi-card {
+  min-width: 0;
+}
+
+.finance-summary-grid .kpi-value {
+  font-size: clamp(20px, 2vw, 26px);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -4341,6 +4355,10 @@ textarea:focus {
 
   .kpi-summary-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .finance-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .pos-orders-page {

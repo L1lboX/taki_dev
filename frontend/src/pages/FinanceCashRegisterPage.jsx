@@ -33,6 +33,9 @@ export default function FinanceCashRegisterPage() {
       queryClient.invalidateQueries({ queryKey: ['cash-register'] }),
       queryClient.invalidateQueries({ queryKey: ['bills'] }),
       queryClient.invalidateQueries({ queryKey: ['cash'] }),
+      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['finance-accounts'] }),
+      queryClient.invalidateQueries({ queryKey: ['finance-summary'] }),
     ])
   }
 
@@ -48,7 +51,8 @@ export default function FinanceCashRegisterPage() {
   const closeMutation = useMutation({
     mutationFn: () => api.closeCashRegister({ countedCashAmount: Number(countedAmount) || 0 }),
     onSuccess: async (result) => {
-      toast.success(`Caja cerrada. Diferencia: ${formatMoney(result?.closure?.discrepancy || 0)}`)
+      const financeCount = result?.financeTransactions?.length || 0
+      toast.success(`Caja cerrada. Diferencia: ${formatMoney(result?.closure?.discrepancy || 0)}. Finanzas: ${financeCount} movimiento(s).`)
       await refresh()
     },
     onError: (error) => toast.error(error.message),
@@ -98,6 +102,10 @@ export default function FinanceCashRegisterPage() {
                 <p className="kpi-value" style={{ fontSize: 22 }}>{formatMoney(current.summary?.transferTotal)}</p>
               </article>
             </div>
+
+            <p className="alert alert-info">
+              Al cerrar caja, el efectivo se registra en Caja General y las billeteras digitales en Billetera Digital dentro de Finanzas.
+            </p>
 
             <div className="panel-soft" style={{ maxWidth: 380 }}>
               <div className="form-stack">

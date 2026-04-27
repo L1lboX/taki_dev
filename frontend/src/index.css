@@ -1001,18 +1001,178 @@ textarea:focus {
   margin-top: 4px;
 }
 
+.finance-transactions-page {
+  width: min(1180px, 100%);
+  margin-inline: auto;
+}
+
+.finance-hero-panel {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0 18px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.finance-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.finance-title {
+  margin: 0;
+  color: var(--txt);
+  font-size: clamp(34px, 4vw, 48px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.finance-copy {
+  margin: 8px 0 0;
+  color: var(--txt2);
+  font-size: 14px;
+}
+
+.finance-system-panel {
+  box-shadow: none;
+}
+
 .finance-summary-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-.finance-summary-grid .kpi-card {
+.finance-metric {
+  min-height: 96px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: #fffdf9;
+  padding: 12px;
+  display: grid;
+  align-content: space-between;
+  gap: 10px;
+}
+
+.finance-metric span {
+  color: var(--txt2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.finance-metric strong {
+  color: var(--txt);
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1;
+}
+
+.finance-metric.danger strong {
+  color: var(--accent);
+}
+
+.finance-summary-grid .kpi-card,
+.finance-metric {
   min-width: 0;
 }
 
-.finance-summary-grid .kpi-value {
-  font-size: clamp(20px, 2vw, 26px);
+.finance-filter-grid {
+  margin-top: 12px;
+}
+
+.finance-history-list {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: #fffdf9;
+  overflow: hidden;
+}
+
+.finance-history-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.finance-history-row:last-child {
+  border-bottom: none;
+}
+
+.finance-direction {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  display: inline-grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.finance-history-row.up .finance-direction {
+  background: rgba(47, 107, 87, 0.12);
+  color: #2f6b57;
+}
+
+.finance-history-row.down .finance-direction {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.finance-history-row.swap .finance-direction {
+  background: var(--surface2);
+  color: var(--txt2);
+}
+
+.finance-history-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.finance-history-main strong {
+  color: var(--txt);
+  font-size: 14px;
+}
+
+.finance-history-main span,
+.finance-history-main small {
+  overflow: hidden;
+  color: var(--txt2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-history-amount {
+  color: var(--txt);
+  font-size: 15px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.finance-history-row.up .finance-history-amount {
+  color: #2f6b57;
+}
+
+.finance-history-row.down .finance-history-amount {
+  color: var(--accent);
+}
+
+.finance-modal-backdrop {
+  background: rgba(26, 28, 30, 0.52);
+}
+
+.finance-modal-card {
+  width: min(620px, 100%);
+  box-shadow: var(--sh-md);
 }
 
 .badge {
@@ -4492,6 +4652,39 @@ textarea:focus {
   .cash-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .finance-hero-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finance-hero-panel .btn {
+    width: 100%;
+  }
+
+  .finance-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-metric {
+    min-height: 82px;
+    padding: 10px;
+  }
+
+  .finance-history-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px;
+    padding: 11px 10px;
+  }
+
+  .finance-history-amount {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .finance-modal-card .form-grid-2 {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .cash-history-filters {

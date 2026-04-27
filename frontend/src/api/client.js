@@ -281,8 +281,6 @@ export const api = {
     const query = params.toString()
     return apiRequest(`/finance/summary${query ? `?${query}` : ''}`)
   },
-  registerDailySalesFinanceTransaction: (body) =>
-    apiRequest('/finance/transactions/register-sales', { method: 'POST', body: JSON.stringify(body) }),
 
   getMenuSections: ({ active } = {}) => {
     const params = new URLSearchParams()

@@ -34,12 +34,6 @@ const createTxSchema = z.object({
   source: z.string().trim().optional().default('MANUAL'),
 })
 
-const registerSalesSchema = z.object({
-  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
-  accountId: z.string().trim().min(1),
-  note: z.string().trim().optional().default(''),
-})
-
 router.get(
   '/accounts',
   requireAuth,
@@ -106,17 +100,6 @@ router.post(
   asyncRoute(async (req, res) => {
     const payload = createTxSchema.parse(req.body)
     const tx = db.createFinanceTransaction(payload, req.user.id)
-    return res.status(201).json(tx)
-  }),
-)
-
-router.post(
-  '/transactions/register-sales',
-  requireAuth,
-  requireRoles(ROLES.ACCOUNTANT, ROLES.SUPER_ADMIN),
-  asyncRoute(async (req, res) => {
-    const payload = registerSalesSchema.parse(req.body)
-    const tx = db.registerDailySalesFinanceTransaction(payload, req.user.id)
     return res.status(201).json(tx)
   }),
 )

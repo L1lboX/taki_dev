@@ -3564,10 +3564,47 @@ db.closeCashRegister = function closeCashRegister(closedByUserId, countedCashAmo
 
   state.cashClosures.push(closure)
 
+  const salesTransactions = []
+  const cashReference = `CAJA-${cash.id}-EFECTIVO`
+  const digitalReference = `CAJA-${cash.id}-DIGITAL`
+  const cashAccount = state.financeAccounts.find((row) => row.id === 'fa-cash-general' && row.active)
+  const digitalAccount = state.financeAccounts.find((row) => row.id === 'fa-digital-wallet' && row.active)
+
+  if (summary.cashTotal > 0 && cashAccount && !state.financeTransactions.some((tx) => tx.reference === cashReference)) {
+    salesTransactions.push(this.createFinanceTransaction(
+      {
+        type: FINANCE_TRANSACTION_TYPE.INCOME,
+        amount: summary.cashTotal,
+        accountId: cashAccount.id,
+        reference: cashReference,
+        category: 'SALES_CASH',
+        source: 'CASH_CLOSURE',
+        note: `Ventas en efectivo del cierre de caja ${String(cash.id).slice(0, 8)}`,
+      },
+      closedByUserId,
+    ))
+  }
+
+  if (summary.transferTotal > 0 && digitalAccount && !state.financeTransactions.some((tx) => tx.reference === digitalReference)) {
+    salesTransactions.push(this.createFinanceTransaction(
+      {
+        type: FINANCE_TRANSACTION_TYPE.INCOME,
+        amount: summary.transferTotal,
+        accountId: digitalAccount.id,
+        reference: digitalReference,
+        category: 'SALES_DIGITAL',
+        source: 'CASH_CLOSURE',
+        note: `Ventas en billetera digital del cierre de caja ${String(cash.id).slice(0, 8)}`,
+      },
+      closedByUserId,
+    ))
+  }
+
   return {
     cash: clone(cash),
     summary: clone(summary),
     closure: clone(closure),
+    financeTransactions: clone(salesTransactions),
   }
 }
 
@@ -3677,9 +3714,27 @@ db.getFinanceSummary = function getFinanceSummary({ date, month, timezone } = {}
 
   const todaySales = normalizeMoney(todayOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
   const monthSales = normalizeMoney(monthOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
+  const monthSystemIncome = normalizeMoney(
+    state.financeTransactions
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.source === 'CASH_CLOSURE')
+      .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
+      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+  )
+  const monthCashIncome = normalizeMoney(
+    state.financeTransactions
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.category === 'SALES_CASH')
+      .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
+      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+  )
+  const monthDigitalIncome = normalizeMoney(
+    state.financeTransactions
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.category === 'SALES_DIGITAL')
+      .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
+      .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+  )
   const monthManualIncome = normalizeMoney(
     state.financeTransactions
-      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.source !== 'SALES_DAILY')
+      .filter((tx) => tx.type === FINANCE_TRANSACTION_TYPE.INCOME && tx.source !== 'CASH_CLOSURE')
       .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
       .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
   )
@@ -3689,8 +3744,8 @@ db.getFinanceSummary = function getFinanceSummary({ date, month, timezone } = {}
       .filter((tx) => getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.monthKey === monthKey)
       .reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
   )
-  const registeredTodaySales = state.financeTransactions.find(
-    (tx) => tx.source === 'SALES_DAILY' && tx.reference === `VENTAS-${dateKey}`,
+  const todayRegisteredSales = state.financeTransactions.filter(
+    (tx) => tx.source === 'CASH_CLOSURE' && getDatePartsInTimeZone(tx.createdAt, kpiTimeZone)?.dateKey === dateKey,
   )
 
   return {
@@ -3698,10 +3753,13 @@ db.getFinanceSummary = function getFinanceSummary({ date, month, timezone } = {}
     month: monthKey,
     todaySales,
     monthSales,
+    monthSystemIncome,
+    monthCashIncome,
+    monthDigitalIncome,
     monthManualIncome,
     monthExpenses,
-    projectedBalance: normalizeMoney(monthSales + monthManualIncome - monthExpenses),
-    registeredTodaySales: registeredTodaySales ? clone(registeredTodaySales) : null,
+    projectedBalance: normalizeMoney(monthSystemIncome + monthManualIncome - monthExpenses),
+    todayRegisteredSales: clone(todayRegisteredSales),
   }
 }
 
@@ -3769,35 +3827,6 @@ db.createFinanceTransaction = function createFinanceTransaction(payload, created
   return clone(transaction)
 }
 
-db.registerDailySalesFinanceTransaction = function registerDailySalesFinanceTransaction(payload, createdByUserId) {
-  ensureBusinessState()
-  const dateKey = normalizeDateKeyInput(payload?.date, resolveKpiTimeZone())
-  const reference = `VENTAS-${dateKey}`
-  const duplicated = state.financeTransactions.find((tx) => tx.source === 'SALES_DAILY' && tx.reference === reference)
-  if (duplicated) throw new Error('Las ventas de ese dia ya fueron registradas en finanzas')
-
-  const closedOrders = this.getClosedOrdersByDateRange({
-    from: dateKey,
-    to: dateKey,
-    timezone: resolveKpiTimeZone(),
-  })
-  const amount = normalizeMoney(closedOrders.reduce((sum, order) => sum + Number(order?.totals?.total || 0), 0))
-  if (!(amount > 0)) throw new Error('No hay ventas cerradas para registrar en esa fecha')
-
-  return this.createFinanceTransaction(
-    {
-      type: FINANCE_TRANSACTION_TYPE.INCOME,
-      amount,
-      accountId: payload.accountId,
-      reference,
-      category: 'SALES',
-      source: 'SALES_DAILY',
-      note: payload.note || `Ventas cerradas del ${dateKey}`,
-    },
-    createdByUserId,
-  )
-}
-
 const mutatingMethods = new Set([
   'login',
   'createSalon',
@@ -3855,7 +3884,6 @@ const mutatingMethods = new Set([
   'createFinanceAccount',
   'updateFinanceAccount',
   'createFinanceTransaction',
-  'registerDailySalesFinanceTransaction',
 ])
 
 for (const methodName of mutatingMethods) {

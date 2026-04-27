@@ -114,7 +114,7 @@ const NAV_GROUPS = [
       {
         type: 'link',
         to: '/admin-avanzada/restaurante',
-        label: 'Restaurante',
+        label: 'Configuracion',
         icon: 'settings',
         roles: ['ADMIN', 'SUPER_ADMIN'],
       },

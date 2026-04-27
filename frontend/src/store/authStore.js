@@ -18,6 +18,11 @@ export const useAuthStore = create((set) => ({
     set({ token, user })
   },
 
+  updateUser: (nextUser) => {
+    localStorage.setItem('taki_user', JSON.stringify(nextUser))
+    set((state) => ({ ...state, user: nextUser }))
+  },
+
   logout: () => {
     localStorage.removeItem('taki_token')
     localStorage.removeItem('taki_user')

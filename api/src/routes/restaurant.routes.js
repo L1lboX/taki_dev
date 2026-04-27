@@ -9,7 +9,7 @@ const router = Router()
 const printerSchema = z.object({
   kitchenEnabled: z.boolean().optional(),
   autoPrintOnSend: z.boolean().optional(),
-  connectionType: z.enum(['LOCAL', 'NETWORK', 'SYSTEM']).optional(),
+  connectionType: z.enum(['USB', 'LAN']).optional(),
   printerName: z.string().trim().optional(),
   host: z.string().trim().optional(),
   port: z.union([z.string().trim(), z.number()]).optional(),

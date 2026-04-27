@@ -14,6 +14,7 @@ import MenuProductsPage from '../pages/MenuProductsPage'
 import MenuSectionsPage from '../pages/MenuSectionsPage'
 import OrdersBillsPage from '../pages/OrdersBillsPage'
 import PosPage from '../pages/PosPage'
+import ProfilePage from '../pages/ProfilePage'
 import QrOrderPage from '../pages/QrOrderPage'
 import RestaurantSettingsPage from '../pages/RestaurantSettingsPage'
 import TableManagementPage from '../pages/TableManagementPage'
@@ -87,6 +88,10 @@ export const router = createBrowserRouter([
           {
             index: true,
             element: <RoleHomeRedirect />,
+          },
+          {
+            path: '/mi-perfil',
+            element: <ProfilePage />,
           },
 
           {

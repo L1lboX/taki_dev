@@ -468,6 +468,7 @@ const sanitizeUser = (user) => {
     username: user.username,
     role: user.role,
     name: user.name,
+    photoUrl: String(user.photoUrl || '').trim(),
     active: user.active !== false,
   }
 }
@@ -613,7 +614,7 @@ function defaultRestaurantPrinterSettings() {
   return {
     kitchenEnabled: true,
     autoPrintOnSend: true,
-    connectionType: 'LOCAL',
+    connectionType: 'USB',
     printerName: '',
     host: '',
     port: '9100',
@@ -630,12 +631,17 @@ function normalizeRestaurantPrinterSettings(rawValue) {
     ...raw,
   }
 
-  const connectionType = String(next.connectionType || defaults.connectionType).trim().toUpperCase()
+  const rawConnectionType = String(next.connectionType || defaults.connectionType).trim().toUpperCase()
+  const connectionType = rawConnectionType === 'LOCAL' || rawConnectionType === 'SYSTEM'
+    ? 'USB'
+    : rawConnectionType === 'NETWORK'
+      ? 'LAN'
+      : rawConnectionType
   const paperWidth = String(next.paperWidth || defaults.paperWidth).trim().toLowerCase()
 
   next.kitchenEnabled = next.kitchenEnabled !== false
   next.autoPrintOnSend = next.autoPrintOnSend !== false
-  next.connectionType = ['LOCAL', 'NETWORK', 'SYSTEM'].includes(connectionType) ? connectionType : defaults.connectionType
+  next.connectionType = ['USB', 'LAN'].includes(connectionType) ? connectionType : defaults.connectionType
   next.printerName = String(next.printerName || '').trim()
   next.host = String(next.host || '').trim()
   next.port = String(next.port || defaults.port).trim() || defaults.port
@@ -2929,6 +2935,44 @@ db.updateUserAdmin = function updateUserAdmin(userId, payload) {
 
   if (payload?.active != null) {
     user.active = Boolean(payload.active)
+  }
+
+  user.updatedAt = nowIso()
+  return sanitizeUser(user)
+}
+
+db.getMyProfile = function getMyProfile(userId) {
+  ensureBusinessState()
+  const user = state.users.find((item) => item.id === userId)
+  if (!user) throw new Error('Usuario no existe')
+  return sanitizeUser(user)
+}
+
+db.updateMyProfile = function updateMyProfile(userId, payload) {
+  ensureBusinessState()
+  const user = state.users.find((item) => item.id === userId)
+  if (!user) throw new Error('Usuario no existe')
+
+  if (payload?.name != null) {
+    const nextName = String(payload.name).trim()
+    if (!nextName) throw new Error('Nombre invalido')
+    user.name = nextName
+  }
+
+  if (payload?.photoUrl != null) {
+    user.photoUrl = String(payload.photoUrl || '').trim()
+  }
+
+  const wantsPasswordChange = payload?.newPassword != null || payload?.currentPassword != null
+  if (wantsPasswordChange) {
+    const currentPassword = String(payload?.currentPassword || '').trim()
+    const nextPassword = String(payload?.newPassword || '').trim()
+
+    if (!currentPassword) throw new Error('Ingresa tu password actual')
+    if (user.password !== currentPassword) throw new Error('El password actual no coincide')
+    if (!nextPassword || nextPassword.length < 4) throw new Error('El nuevo password debe tener al menos 4 caracteres')
+
+    user.password = nextPassword
   }
 
   user.updatedAt = nowIso()

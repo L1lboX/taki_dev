@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { getSocket } from '../../lib/socket'
 import { useAuthStore } from '../../store/authStore'
@@ -53,6 +54,7 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const { themeMode, toggleTheme } = useAppShellTheme()
   const { muted, toggleMuted, play } = useNotificationSound()
@@ -114,6 +116,11 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
     setAnchorEl(null)
   }
 
+  const handleOpenProfile = () => {
+    handleCloseUserMenu()
+    navigate('/mi-perfil')
+  }
+
   const handleLogout = () => {
     handleCloseUserMenu()
     queryClient.clear()
@@ -164,7 +171,9 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
               overlap="circular"
               variant="dot"
             >
-              <Avatar className="header-avatar">{getInitial(user?.name)}</Avatar>
+              <Avatar className="header-avatar" src={user?.photoUrl || undefined}>
+                {getInitial(user?.name)}
+              </Avatar>
             </Badge>
           </IconButton>
         </Tooltip>
@@ -212,6 +221,10 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
                 </Button>
               </div>
             )}
+
+            <Button fullWidth onClick={handleOpenProfile} size="small" variant="outlined">
+              Mi perfil
+            </Button>
 
             <Button onClick={handleLogout} size="small" startIcon={<LogoutRoundedIcon fontSize="small" />} variant="contained">
               Cerrar sesion

@@ -84,6 +84,8 @@ export async function apiRequest(path, options = {}) {
 
 export const api = {
   login: (body) => apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  getMyProfile: () => apiRequest('/auth/me'),
+  updateMyProfile: (body) => apiRequest('/auth/me', { method: 'PATCH', body: JSON.stringify(body) }),
   getSalons: ({ active } = {}) => {
     const params = new URLSearchParams()
     if (typeof active === 'boolean') params.set('active', String(active))

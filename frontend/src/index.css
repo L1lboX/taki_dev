@@ -680,6 +680,10 @@ textarea:focus {
   padding: 16px;
 }
 
+.header-user-popover .MuiButton-root {
+  justify-content: flex-start;
+}
+
 .header-user-name {
   font-weight: 700 !important;
   color: var(--txt);
@@ -1494,6 +1498,15 @@ textarea:focus {
   gap: 14px;
 }
 
+.restaurant-settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.restaurant-settings-field-span {
+  grid-column: 1 / -1;
+}
+
 .restaurant-settings-kicker {
   margin: 0 0 8px;
   color: var(--txt3);
@@ -1504,7 +1517,7 @@ textarea:focus {
 }
 
 .restaurant-settings-printer-layout,
-.restaurant-settings-profile-layout {
+.profile-settings-layout {
   display: grid;
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: 18px;
@@ -1512,7 +1525,7 @@ textarea:focus {
 }
 
 .restaurant-settings-printer-summary,
-.restaurant-settings-profile-preview {
+.profile-settings-summary {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 18px;
@@ -1537,6 +1550,14 @@ textarea:focus {
 .restaurant-settings-printer-fields {
   display: grid;
   gap: 16px;
+}
+
+.restaurant-settings-grid input,
+.restaurant-settings-grid select,
+.restaurant-settings-printer-fields input,
+.restaurant-settings-printer-fields select,
+.profile-settings-grid input {
+  min-height: 42px;
 }
 
 .restaurant-settings-toggle-grid {
@@ -1578,30 +1599,83 @@ textarea:focus {
   line-height: 1.45;
 }
 
-.restaurant-settings-profile-card {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  margin-top: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(27, 67, 50, 0.12);
+.profile-settings-page .panel + .panel {
+  padding-top: 20px;
 }
 
-.restaurant-settings-profile-card p {
-  margin: 6px 0 0;
+.profile-settings-summary {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.profile-settings-avatar-wrap {
+  width: 112px;
+  height: 112px;
+}
+
+.profile-settings-avatar-image,
+.profile-settings-avatar-fallback {
+  width: 112px;
+  height: 112px;
+  border-radius: 28px;
+}
+
+.profile-settings-avatar-image {
+  object-fit: cover;
+  border: 1px solid rgba(27, 67, 50, 0.14);
+  box-shadow: 0 12px 28px rgba(35, 30, 24, 0.08);
+}
+
+.profile-settings-avatar-fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(27, 67, 50, 0.92), rgba(64, 145, 108, 0.8));
+  color: #fff;
+  font-size: 36px;
+  font-weight: 800;
+}
+
+.profile-settings-summary-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.profile-settings-summary-copy strong {
+  font-size: 18px;
+  color: var(--txt);
+}
+
+.profile-settings-summary-copy span {
   color: var(--txt2);
   font-size: 13px;
-  line-height: 1.45;
 }
 
-.restaurant-settings-profile-swatch {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+.profile-settings-upload-btn {
+  position: relative;
+}
+
+.profile-settings-form {
+  display: grid;
+  gap: 18px;
+}
+
+.profile-settings-grid {
+  gap: 14px;
+}
+
+.profile-settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-settings-field-span {
+  grid-column: 1 / -1;
+}
+
+.profile-settings-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .restaurant-settings-actions {
@@ -1611,14 +1685,16 @@ textarea:focus {
 
 @media (max-width: 900px) {
   .restaurant-settings-printer-layout,
-  .restaurant-settings-profile-layout {
+  .profile-settings-layout {
     grid-template-columns: 1fr;
   }
 
+  .profile-settings-actions,
   .restaurant-settings-actions {
     justify-content: stretch;
   }
 
+  .profile-settings-actions .btn,
   .restaurant-settings-actions .btn {
     width: 100%;
   }

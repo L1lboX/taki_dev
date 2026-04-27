@@ -4352,29 +4352,99 @@ textarea:focus {
   }
 
   .pos-orders-kpis {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .pos-orders-kpi-card {
-    padding: 11px 12px;
-  }
-
-  .pos-orders-kpi-value {
-    font-size: 34px;
-  }
-
-  .pos-orders-table-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .pos-orders-table-card {
+  .pos-orders-kpi-card {
+    min-height: 84px;
+    padding: 9px 10px;
+    gap: 6px;
+  }
+
+  .pos-orders-kpi-head {
+    gap: 6px;
+    font-size: 11.5px;
+    line-height: 1.15;
+  }
+
+  .pos-orders-kpi-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: var(--r-sm);
+    font-size: 12px;
+  }
+
+  .pos-orders-kpi-value {
+    font-size: 25px;
+  }
+
+  .pos-orders-kpi-track {
+    height: 4px;
+  }
+
+  .pos-orders-salon-group {
+    padding: 8px;
     border-radius: var(--r-md);
-    padding: 9px;
+  }
+
+  .pos-orders-salon-head {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .pos-orders-salon-kicker {
+    display: none;
+  }
+
+  .pos-orders-salon-title {
+    font-size: 18px;
+  }
+
+  .pos-orders-table-grid {
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 6px;
+  }
+
+  .pos-orders-table-card {
+    min-height: 78px;
+    border-radius: var(--r-sm);
+    padding: 7px;
+    gap: 4px;
+    border-left-width: 2px;
   }
 
   .pos-orders-table-number {
-    font-size: 22px;
+    font-size: 19px;
+  }
+
+  .pos-orders-table-salon {
+    display: none;
+  }
+
+  .pos-orders-table-guests {
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .pos-orders-table-status {
+    gap: 4px;
+    font-size: 10.5px;
+    line-height: 1.1;
+  }
+
+  .pos-orders-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .pos-orders-table-counters {
+    gap: 3px;
+  }
+
+  .counter {
+    padding: 1px 5px;
+    font-size: 9.5px;
   }
 
   .pos-order-drawer {
@@ -4397,9 +4467,13 @@ textarea:focus {
   }
 
   .kitchen-grid,
-  .cash-kpi-grid,
   .home-kpi-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cash-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .cash-history-filters {

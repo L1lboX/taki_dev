@@ -1918,12 +1918,13 @@ export const db = {
       closedAt: null,
       closedByUserId: null,
       countedCashAmount: null,
+      countedDigitalAmount: null,
     }
     state.cashSessions.push(session)
     return clone(session)
   },
 
-  closeCashSession(closedByUserId, countedCashAmount) {
+  closeCashSession(closedByUserId, countedCashAmount, countedDigitalAmount = 0) {
     const session = this.getOpenCashSession()
     if (!session) throw new Error('No existe una caja abierta')
 
@@ -1931,6 +1932,7 @@ export const db = {
     session.closedAt = nowIso()
     session.closedByUserId = closedByUserId
     session.countedCashAmount = Number(countedCashAmount) || 0
+    session.countedDigitalAmount = Number(countedDigitalAmount) || 0
 
     return clone(session)
   },
@@ -3541,18 +3543,24 @@ db.openCashRegister = function openCashRegister(openingAmount, openedByUserId) {
   return db.openCashSession(openingAmount, openedByUserId)
 }
 
-db.closeCashRegister = function closeCashRegister(closedByUserId, countedCashAmount) {
+db.closeCashRegister = function closeCashRegister(closedByUserId, countedCashAmount, countedDigitalAmount = 0) {
   ensureBusinessState()
-  const cash = db.closeCashSession(closedByUserId, countedCashAmount)
+  const cash = db.closeCashSession(closedByUserId, countedCashAmount, countedDigitalAmount)
   const summary = db.getCashSummaryBySessionId(cash.id)
 
-  const discrepancy = normalizeMoney((Number(cash.openingAmount || 0) + Number(summary.cashTotal || 0)) - Number(cash.countedCashAmount || 0))
+  const cashDiscrepancy = normalizeMoney((Number(cash.openingAmount || 0) + Number(summary.cashTotal || 0)) - Number(cash.countedCashAmount || 0))
+  const digitalDiscrepancy = normalizeMoney(Number(summary.transferTotal || 0) - Number(cash.countedDigitalAmount || 0))
+  const discrepancy = normalizeMoney(cashDiscrepancy + digitalDiscrepancy)
 
   const closure = {
     id: randomUUID(),
     cashSessionId: cash.id,
     date: cash.date,
     summary,
+    countedCashAmount: normalizeMoney(cash.countedCashAmount),
+    countedDigitalAmount: normalizeMoney(cash.countedDigitalAmount),
+    cashDiscrepancy,
+    digitalDiscrepancy,
     discrepancy,
     pendingTransfer: {
       cashAmount: normalizeMoney(summary.cashTotal),

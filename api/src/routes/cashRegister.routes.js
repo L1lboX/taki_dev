@@ -13,6 +13,7 @@ const openSchema = z.object({
 
 const closeSchema = z.object({
   countedCashAmount: z.coerce.number().nonnegative().default(0),
+  countedDigitalAmount: z.coerce.number().nonnegative().default(0),
 })
 
 router.get(
@@ -52,7 +53,7 @@ router.post(
   requireRoles(ROLES.CASHIER, ROLES.SUPER_ADMIN),
   asyncRoute(async (req, res) => {
     const payload = closeSchema.parse(req.body)
-    const result = db.closeCashRegister(req.user.id, payload.countedCashAmount)
+    const result = db.closeCashRegister(req.user.id, payload.countedCashAmount, payload.countedDigitalAmount)
     emitEvent('cash.session.updated', null)
     return res.status(201).json(result)
   }),

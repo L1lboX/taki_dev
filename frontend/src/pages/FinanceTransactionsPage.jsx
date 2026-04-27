@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { scopedQueryKey } from '../lib/queryAuth'
 import { useAuthStore } from '../store/authStore'
 
 const TX_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER']
+const PAGE_SIZE = 6
 const todayIso = new Date().toISOString().slice(0, 10)
 const currentMonthIso = todayIso.slice(0, 7)
 
@@ -100,6 +101,7 @@ export default function FinanceTransactionsPage() {
   const [summaryMonth, setSummaryMonth] = useState(currentMonthIso)
   const [isModalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(createInitialForm)
+  const [page, setPage] = useState(1)
 
   const accountsQuery = useQuery({
     queryKey: scopedQueryKey('finance-accounts', user, 'all'),
@@ -141,6 +143,16 @@ export default function FinanceTransactionsPage() {
   const rows = transactionsQuery.data || []
   const summary = summaryQuery.data || null
   const categoryOptions = categoryOptionsFor(form.type)
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters.from, filters.to, filters.accountId, filters.type])
+
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, totalPages))
+  }, [totalPages])
 
   function updateType(type) {
     setForm((prev) => ({
@@ -207,7 +219,7 @@ export default function FinanceTransactionsPage() {
             <h3 className="section-title">Ventas del sistema</h3>
             <p className="section-subtitle">Estos montos se registran en finanzas al cerrar caja, separados por metodo de pago.</p>
           </div>
-          <div className="inline-actions">
+          <div className="inline-actions finance-system-controls">
             <input onChange={(event) => setSummaryDate(event.target.value)} type="date" value={summaryDate} />
             <input onChange={(event) => setSummaryMonth(event.target.value)} type="month" value={summaryMonth} />
           </div>
@@ -284,22 +296,23 @@ export default function FinanceTransactionsPage() {
 
         {!!rows.length && (
           <div className="finance-history-list">
-            {rows.map((row) => {
+            {pageRows.map((row) => {
               const direction = txDirection(row)
               const accountName = accountById.get(row.accountId)?.name
               const fromName = accountById.get(row.fromAccountId)?.name
               const toName = accountById.get(row.toAccountId)?.name
               const accountText = row.type === 'TRANSFER' ? `${fromName || '-'} -> ${toName || '-'}` : accountName || '-'
+              const isCashClosure = String(row.source || '').toUpperCase() === 'CASH_CLOSURE'
 
               return (
                 <article className={`finance-history-row ${direction}`} key={row.id}>
                   <span className="finance-direction" aria-hidden="true">
-                    {direction === 'up' ? '↑' : direction === 'down' ? '↓' : '↔'}
+                    {direction === 'up' ? '\u2191' : direction === 'down' ? '\u2193' : '\u2194'}
                   </span>
                   <div className="finance-history-main">
                     <strong>{categoryLabel(row.category)}</strong>
-                    <span>{formatDate(row.createdAt)} · {sourceLabel(row.source)} · {accountText}</span>
-                    {(row.reference || row.note) && <small>{row.reference || row.note}</small>}
+                    <span>{formatDate(row.createdAt)} - {sourceLabel(row.source)}{isCashClosure ? '' : ` - ${accountText}`}</span>
+                    {!isCashClosure && (row.reference || row.note) && <small>{row.reference || row.note}</small>}
                   </div>
                   <strong className="finance-history-amount">
                     {row.type === 'EXPENSE' ? '-' : row.type === 'INCOME' ? '+' : ''}
@@ -308,6 +321,17 @@ export default function FinanceTransactionsPage() {
                 </article>
               )
             })}
+            <div className="finance-pagination">
+              <span>Pagina {page} de {totalPages}</span>
+              <div className="inline-actions">
+                <button className="btn btn-soft" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))} type="button">
+                  Anterior
+                </button>
+                <button className="btn btn-soft" disabled={page >= totalPages} onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} type="button">
+                  Siguiente
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>

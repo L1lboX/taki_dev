@@ -13,7 +13,8 @@ export default function FinanceCashRegisterPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [openingAmount, setOpeningAmount] = useState(0)
-  const [countedAmount, setCountedAmount] = useState(0)
+  const [countedCashAmount, setCountedCashAmount] = useState(0)
+  const [countedDigitalAmount, setCountedDigitalAmount] = useState(0)
 
   const currentQuery = useQuery({
     queryKey: scopedQueryKey(['cash-register', 'current'], user),
@@ -49,7 +50,10 @@ export default function FinanceCashRegisterPage() {
   })
 
   const closeMutation = useMutation({
-    mutationFn: () => api.closeCashRegister({ countedCashAmount: Number(countedAmount) || 0 }),
+    mutationFn: () => api.closeCashRegister({
+      countedCashAmount: Number(countedCashAmount) || 0,
+      countedDigitalAmount: Number(countedDigitalAmount) || 0,
+    }),
     onSuccess: async (result) => {
       const financeCount = result?.financeTransactions?.length || 0
       toast.success(`Caja cerrada. Diferencia: ${formatMoney(result?.closure?.discrepancy || 0)}. Finanzas: ${financeCount} movimiento(s).`)
@@ -110,7 +114,9 @@ export default function FinanceCashRegisterPage() {
             <div className="panel-soft" style={{ maxWidth: 380 }}>
               <div className="form-stack">
                 <label className="form-label">Efectivo contado</label>
-                <input onChange={(event) => setCountedAmount(event.target.value)} type="number" value={countedAmount} />
+                <input onChange={(event) => setCountedCashAmount(event.target.value)} step="0.01" type="number" value={countedCashAmount} />
+                <label className="form-label">Billetera digital contada</label>
+                <input onChange={(event) => setCountedDigitalAmount(event.target.value)} step="0.01" type="number" value={countedDigitalAmount} />
                 <button className="btn btn-danger-soft" disabled={closeMutation.isPending} onClick={() => closeMutation.mutate()} type="button">
                   Cerrar caja
                 </button>

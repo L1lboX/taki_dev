@@ -89,13 +89,24 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
       const tableLabel = payload?.tableNumber != null
         ? `Mesa ${payload.tableNumber}`
         : payload?.tableId
-          ? `Mesa ${payload.tableId}`
+          ? `Mesa ${String(payload.tableId).replace(/^t/i, '')}`
           : 'Mesa'
       const salonLabel = String(payload?.salonName || '').trim()
-      const detail = salonLabel ? `${tableLabel} · ${salonLabel}` : tableLabel
+      const itemLabels = (payload?.items || [])
+        .slice(0, 3)
+        .map((item) => `${item.quantity || 1}x ${item.productName || 'Plato'}`)
+        .join(', ')
+      const guestLabel = payload?.guestNumber ? `Persona ${payload.guestNumber}` : ''
+      const detail = [tableLabel, salonLabel, guestLabel, itemLabels].filter(Boolean).join(' · ')
 
-      toast.info('Nuevo pedido QR pendiente', {
+      toast.info('Pedido QR para aprobar', {
         description: detail,
+        action: payload?.tableId
+          ? {
+              label: 'Aprobar',
+              onClick: () => navigate(`/pedidos?tableId=${encodeURIComponent(payload.tableId)}`),
+            }
+          : undefined,
       })
 
       void playQrNotification()
@@ -106,7 +117,44 @@ export default function HeaderBar({ isMobileMenuOpen = false, onToggleMobileMenu
     return () => {
       socket.off('qr.new-order', handleQrNewOrder)
     }
-  }, [canReceiveQrAlerts, playQrNotification])
+  }, [canReceiveQrAlerts, navigate, playQrNotification])
+
+  useEffect(() => {
+    if (!canReceiveQrAlerts) return undefined
+
+    const socket = getSocket()
+    const handleOrderReady = (payload) => {
+      const tableLabel = payload?.tableNumber != null
+        ? `Mesa ${payload.tableNumber}`
+        : payload?.tableId
+          ? `Mesa ${String(payload.tableId).replace(/^t/i, '')}`
+          : 'Mesa'
+      const itemLabels = (payload?.items || [])
+        .slice(0, 3)
+        .map((item) => `${item.quantity || 1}x ${item.productName || 'Plato'}`)
+        .join(', ')
+      const guestLabel = payload?.guestNumber ? `Persona ${payload.guestNumber}` : ''
+      const detail = [tableLabel, guestLabel, itemLabels].filter(Boolean).join(' · ')
+
+      toast.success('Pedido listo para entregar', {
+        description: detail,
+        action: payload?.tableId
+          ? {
+              label: 'Ver',
+              onClick: () => navigate(`/pedidos?tableId=${encodeURIComponent(payload.tableId)}`),
+            }
+          : undefined,
+      })
+
+      void playQrNotification()
+    }
+
+    socket.on('order.ready', handleOrderReady)
+
+    return () => {
+      socket.off('order.ready', handleOrderReady)
+    }
+  }, [canReceiveQrAlerts, navigate, playQrNotification])
 
   const handleOpenUserMenu = (event) => {
     setAnchorEl(event.currentTarget)

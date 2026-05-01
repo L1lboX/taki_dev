@@ -62,13 +62,14 @@ export async function downloadKitchenTicketPdf(ticket, options = {}) {
     y += extraGap
   }
 
-  const tableLabel = resolveTableLabel(ticket.tableId, options.tableNumber)
+  const tableLabel = resolveTableLabel(ticket.tableId, options.tableNumber ?? ticket.tableNumber ?? ticket.tableLabel)
   const issuedAt = new Date(ticket.createdAt || Date.now()).toLocaleString('es-PE', { hour12: false })
-  const ticketCode = ticket.id.slice(0, 6)
+  const ticketNumber = Number(ticket.displayNumber || ticket.ticketNumber || 0)
+  const ticketCode = ticketNumber > 0 ? String(ticketNumber) : ticket.id.slice(0, 6)
 
   writeLine('TAKI POS', { size: 12, weight: 'bold', align: 'center' })
   writeLine('Comanda cocina (PDF temporal)', { size: 8, align: 'center', extraGap: 1.5 })
-  writeLine(`Ticket: ${ticketCode}`, { weight: 'bold' })
+  writeLine(`Comanda: ${ticketCode}`, { weight: 'bold' })
   writeLine(`Mesa: ${tableLabel}`)
   writeLine(`Fecha: ${issuedAt}`)
   writeLine('----------------------------------------', { size: 8 })

@@ -1,4 +1,5 @@
 import { emitEvent } from './realtime.js'
+import { buildKitchenReadyNotificationPayload } from './orderNotifications.js'
 import { db } from './store.js'
 
 let timer = null
@@ -12,6 +13,9 @@ function runAutoKitchenProgress() {
     emitEvent('kitchen.ticket.updated', change.ticket)
     if (change.order) {
       emitEvent('order.updated', change.order)
+      if (change.order.status === 'READY') {
+        emitEvent('order.ready', buildKitchenReadyNotificationPayload(change.order))
+      }
     }
   }
 }

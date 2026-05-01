@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
 import { asyncRoute, requireAuth, requireRoles } from '../auth.js'
-import { ORDER_SOURCE, ORDER_STATUS, ROLES, SPLIT_MODE } from '../constants.js'
+import { KITCHEN_TICKET_STATUS, ORDER_SOURCE, ORDER_STATUS, ROLES, SPLIT_MODE } from '../constants.js'
+import { buildQrOrderNotificationPayload } from '../orderNotifications.js'
 import { enqueueKitchenPrint } from '../printer.js'
 import { extractQrGuestToken, requireQrToken } from '../qrToken.js'
 import { emitEvent } from '../realtime.js'
@@ -79,21 +80,6 @@ const updateHistoryOrderSchema = z
   .refine((payload) => payload.status != null || payload.tableId != null, {
     message: 'Debe enviar al menos un campo para actualizar',
   })
-
-function buildQrOrderNotificationPayload(order) {
-  const table = db.getTableById(order.tableId)
-  const salon = table ? db.getSalonById(table.salonId) : null
-
-  return {
-    orderId: order.id,
-    tableId: order.tableId,
-    tableNumber: table?.number ?? null,
-    guestNumber: order.guestNumber ?? null,
-    salonId: salon?.id ?? null,
-    salonName: salon?.name ?? '',
-    status: order.status,
-  }
-}
 
 router.get(
   '/',
@@ -222,12 +208,12 @@ router.post(
     }
 
     const payload = qrItemsSchema.parse(req.body)
-    const hadNoItems = (targetOrder.items || []).length === 0
     const order = db.addItemsToOrder(req.params.id, payload.items)
-    emitEvent('order.updated', order)
-    if (hadNoItems && (order.items || []).length > 0 && order.status === ORDER_STATUS.PENDING_WAITER_APPROVAL) {
+    if ((order.items || []).length > 0 && order.status === ORDER_STATUS.PENDING_WAITER_APPROVAL) {
       emitEvent('qr.new-order', buildQrOrderNotificationPayload(order))
     }
+
+    emitEvent('order.updated', order)
     return res.json(order)
   }),
 )
@@ -336,6 +322,37 @@ router.patch(
       ...result,
       printDispatch,
     })
+  }),
+)
+
+router.patch(
+  '/:id/deliver',
+  requireAuth,
+  requireRoles(ROLES.WAITER, ROLES.ADMIN, ROLES.SUPER_ADMIN),
+  asyncRoute(async (req, res) => {
+    const order = db.getOrderById(req.params.id)
+    if (!order) throw new Error('Pedido no existe')
+    if (order.status !== ORDER_STATUS.READY) {
+      throw new Error('Solo se puede entregar un pedido en estado LISTO')
+    }
+
+    let result
+    if (order.kitchenTicketId) {
+      result = db.updateKitchenTicketStatus(order.kitchenTicketId, KITCHEN_TICKET_STATUS.DELIVERED)
+    } else {
+      result = {
+        ticket: null,
+        order: db.updateOrderRecord(order.id, { status: ORDER_STATUS.DELIVERED }, ROLES.ADMIN),
+      }
+    }
+
+    if (result.ticket) {
+      emitEvent('kitchen.ticket.updated', result.ticket)
+    }
+    emitEvent('order.updated', result.order)
+    emitEvent('table.session.updated', { tableId: result.order.tableId })
+
+    return res.json(result)
   }),
 )
 

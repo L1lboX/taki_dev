@@ -49,7 +49,10 @@ export function enqueueKitchenPrint(ticket) {
 
   db.createPrinterJob(ticket.id, {
     ticketId: ticket.id,
+    displayNumber: ticket.displayNumber || ticket.ticketNumber || null,
     tableId: ticket.tableId,
+    tableNumber: ticket.tableNumber ?? null,
+    tableLabel: ticket.tableLabel || '',
     items: ticket.items,
   })
 

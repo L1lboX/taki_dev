@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../api/client'
 import { downloadKitchenTicketPdf } from '../lib/kitchenTicketPdf'
@@ -181,6 +182,7 @@ const ORDER_PANEL_COLORS = {
 export default function PosPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [selectedTableId, setSelectedTableId] = useState('')
   const [persons, setPersons] = useState([])
@@ -192,6 +194,7 @@ export default function PosPage() {
   const composeScrollRef = useRef(null)
   const personCardRefs = useRef({})
   const previousPersonCountRef = useRef(0)
+  const lastOpenedTableParamRef = useRef('')
 
   const tablesQuery = useQuery({
     queryKey: scopedQueryKey('tables', user),
@@ -429,6 +432,10 @@ export default function PosPage() {
     mutationFn: (orderId) => api.approveOrder(orderId),
   })
 
+  const deliverOrderMutation = useMutation({
+    mutationFn: (orderId) => api.deliverOrder(orderId),
+  })
+
   const isConfirming =
     openSessionMutation.isPending ||
     updateGuestsMutation.isPending ||
@@ -436,7 +443,8 @@ export default function PosPage() {
     addItemsMutation.isPending ||
     sendKitchenMutation.isPending ||
     sendKitchenBatchMutation.isPending ||
-    approveQrOrderMutation.isPending
+    approveQrOrderMutation.isPending ||
+    deliverOrderMutation.isPending
 
   useEffect(() => {
     const socket = getSocket()
@@ -472,6 +480,23 @@ export default function PosPage() {
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isOrderDrawerOpen])
+
+  useEffect(() => {
+    const tableIdParam = searchParams.get('tableId') || ''
+    if (!tableIdParam || lastOpenedTableParamRef.current === tableIdParam || !tables.length) return
+
+    const table = tables.find((row) => row.id === tableIdParam || row.operationalTableId === tableIdParam)
+    if (!table) return
+
+    lastOpenedTableParamRef.current = tableIdParam
+    setOrderViewMode('TABLES')
+    selectTable(table)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('tableId')
+      return next
+    }, { replace: true })
+  }, [searchParams, setSearchParams, tables])
 
   useEffect(() => {
     if (!isComposeMode) {
@@ -828,6 +853,22 @@ export default function PosPage() {
     }
   }
 
+  async function markOrderDelivered(order) {
+    try {
+      await deliverOrderMutation.mutateAsync(order.id)
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['tables'] }),
+        queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+      ])
+
+      toast.success(`Pedido entregado: ${order.id.slice(0, 8)}`)
+    } catch (error) {
+      toast.error(error.message || 'No se pudo marcar como entregado')
+    }
+  }
+
   function createTakeAwayOrder() {
     setOrderViewMode('TAKEAWAY')
     setOrderDrawerOpen(false)
@@ -1069,6 +1110,55 @@ export default function PosPage() {
                           </div>
                           <strong>{formatMoney(order.totals?.total || 0)}</strong>
                         </div>
+                        {order.status === 'READY' && (
+                          <button
+                            className="btn btn-main"
+                            disabled={isConfirming}
+                            onClick={() => markOrderDelivered(order)}
+                            style={{ marginTop: 8, width: '100%' }}
+                            type="button"
+                          >
+                            Entregado
+                          </button>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {!!selectedTableQrOrders.length && (
+                  <div className="column-list" style={{ marginTop: 10 }}>
+                    {selectedTableQrOrders.map((order) => (
+                      <article className="card-mini" key={order.id}>
+                        <div className="section-head">
+                          <div>
+                            <p className="small">
+                              <strong>QR:</strong> {order.id.slice(0, 8)}{order.guestNumber ? ` · Persona ${order.guestNumber}` : ''}
+                            </p>
+                            <p className="small muted">Estado: {orderStatusLabel(order.status)}</p>
+                          </div>
+                          <strong>{formatMoney(order.totals?.total || 0)}</strong>
+                        </div>
+                        {!!order.items?.length && (
+                          <div className="column-list" style={{ marginTop: 6 }}>
+                            {order.items.slice(0, 4).map((item) => (
+                              <p className="small muted" key={item.id}>
+                                {item.quantity || 1}x {normalizeLabel(item.productName)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        {order.status === 'READY' && (
+                          <button
+                            className="btn btn-main"
+                            disabled={isConfirming}
+                            onClick={() => markOrderDelivered(order)}
+                            style={{ marginTop: 8, width: '100%' }}
+                            type="button"
+                          >
+                            Entregado
+                          </button>
+                        )}
                       </article>
                     ))}
                   </div>
@@ -1255,6 +1345,22 @@ export default function PosPage() {
                           )}
                         </Box>
                         <Stack direction="row" spacing={1}>
+                          {order.status === 'READY' && (
+                            <MuiButton
+                              disabled={isConfirming}
+                              onClick={() => markOrderDelivered(order)}
+                              size="small"
+                              sx={{
+                                bgcolor: ORDER_PANEL_COLORS.success,
+                                borderRadius: '12px',
+                                px: 2,
+                                '&:hover': { bgcolor: '#267245' },
+                              }}
+                              variant="contained"
+                            >
+                              Entregado
+                            </MuiButton>
+                          )}
                           {(order.status === 'PENDING_WAITER_APPROVAL' || order.status === 'APPROVED') && (
                             <MuiButton
                               disabled={isConfirming}

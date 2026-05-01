@@ -176,6 +176,7 @@ export const api = {
     apiRequest(`/orders/qr/${orderId}/items`, withQrHeaders({ method: 'POST', body: JSON.stringify(body) }, qrToken, guestToken)),
   approveOrder: (orderId) => apiRequest(`/orders/${orderId}/approve`, { method: 'PATCH' }),
   sendKitchen: (orderId) => apiRequest(`/orders/${orderId}/send-kitchen`, { method: 'PATCH' }),
+  deliverOrder: (orderId) => apiRequest(`/orders/${orderId}/deliver`, { method: 'PATCH' }),
   sendKitchenBatch: (body) => apiRequest('/orders/send-kitchen-batch', { method: 'PATCH', body: JSON.stringify(body) }),
   payOrder: (orderId, body) => apiRequest(`/orders/${orderId}/payments`, { method: 'POST', body: JSON.stringify(body) }),
   listKitchenTickets: () => apiRequest('/kitchen/tickets'),

@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { asyncRoute, requireAuth, requireRoles } from '../auth.js'
 import { KITCHEN_TICKET_STATUS, ROLES } from '../constants.js'
+import { buildKitchenReadyNotificationPayload } from '../orderNotifications.js'
 import { emitEvent } from '../realtime.js'
 import { db } from '../store.js'
 
@@ -37,6 +38,9 @@ router.patch(
     emitEvent('kitchen.ticket.updated', result.ticket)
     if (result.order) {
       emitEvent('order.updated', result.order)
+      if (result.order.status === 'READY') {
+        emitEvent('order.ready', buildKitchenReadyNotificationPayload(result.order))
+      }
     }
 
     return res.json(result)

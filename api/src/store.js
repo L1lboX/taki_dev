@@ -44,6 +44,12 @@ const clone = (value) => structuredClone(value)
 const nowIso = () => new Date().toISOString()
 const dateOnly = (iso = nowIso()) => iso.slice(0, 10)
 
+function dateKeyFromIso(value = nowIso()) {
+  const parsed = new Date(value)
+  if (!Number.isFinite(parsed.getTime())) return dateOnly()
+  return parsed.toISOString().slice(0, 10)
+}
+
 const DEFAULT_KPI_TIMEZONE = 'America/Lima'
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const MONTH_KEY_REGEX = /^\d{4}-\d{2}$/
@@ -434,7 +440,7 @@ function hydrateFromSnapshot(snapshot) {
     tableGuestSessions: clone(asArray(snapshot.tableGuestSessions)),
     tableGroups: clone(asArray(snapshot.tableGroups)),
     orders: clone(asArray(snapshot.orders)),
-    kitchenTickets: clone(asArray(snapshot.kitchenTickets)),
+    kitchenTickets: normalizeKitchenTickets(snapshot.kitchenTickets),
     cashSessions: clone(asArray(snapshot.cashSessions)),
     payments: clone(asArray(snapshot.payments)),
     receipts: clone(asArray(snapshot.receipts)),
@@ -496,6 +502,54 @@ function getOpenTableSessionByIdRaw(sessionId) {
 
 function getActiveTableGroupByTableIdRaw(tableId) {
   return (state.tableGroups || []).find((group) => group.active !== false && Array.isArray(group.tableIds) && group.tableIds.includes(tableId)) || null
+}
+
+function getNextKitchenTicketNumber(createdAt = nowIso()) {
+  const dateKey = dateKeyFromIso(createdAt)
+  const max = state.kitchenTickets.reduce((highest, ticket) => {
+    if (dateKeyFromIso(ticket.createdAt) !== dateKey) return highest
+    return Math.max(highest, Number(ticket.displayNumber || ticket.ticketNumber || 0))
+  }, 0)
+
+  return max + 1
+}
+
+function enrichKitchenTicket(ticket) {
+  if (!ticket) return ticket
+  const table = state.tables.find((row) => row.id === ticket.tableId) || null
+  const displayNumber = Number(ticket.displayNumber || ticket.ticketNumber || 0) || null
+
+  return {
+    ...ticket,
+    displayNumber,
+    ticketNumber: displayNumber,
+    tableNumber: table?.number ?? ticket.tableNumber ?? null,
+    tableLabel: table?.number != null ? String(table.number) : String(ticket.tableId || '').replace(/^t/i, ''),
+  }
+}
+
+function normalizeKitchenTickets(rawTickets) {
+  const tickets = clone(asArray(rawTickets))
+  const countersByDate = new Map()
+
+  for (const ticket of tickets) {
+    const displayNumber = Number(ticket.displayNumber || ticket.ticketNumber || 0)
+    if (displayNumber <= 0) continue
+    const dateKey = dateKeyFromIso(ticket.createdAt)
+    countersByDate.set(dateKey, Math.max(countersByDate.get(dateKey) || 0, displayNumber))
+  }
+
+  tickets
+    .filter((ticket) => Number(ticket.displayNumber || ticket.ticketNumber || 0) <= 0)
+    .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+    .forEach((ticket) => {
+      const dateKey = dateKeyFromIso(ticket.createdAt)
+      const nextNumber = (countersByDate.get(dateKey) || 0) + 1
+      countersByDate.set(dateKey, nextNumber)
+      ticket.displayNumber = nextNumber
+    })
+
+  return tickets
 }
 
 function getGroupedTablesRaw(group) {
@@ -1938,7 +1992,11 @@ export const db = {
   },
 
   listKitchenTickets() {
-    return clone(state.kitchenTickets)
+    return clone(
+      state.kitchenTickets
+        .filter((ticket) => ticket.status !== KITCHEN_TICKET_STATUS.DELIVERED)
+        .map((ticket) => enrichKitchenTicket(ticket)),
+    )
   },
 
   listOrders() {
@@ -2226,14 +2284,18 @@ export const db = {
       throw new Error('Pedido QR pendiente de aprobacion del mesero')
     }
 
+    const createdAt = nowIso()
+    const table = state.tables.find((candidate) => candidate.id === order.tableId) || null
     const ticket = {
       id: randomUUID(),
+      displayNumber: getNextKitchenTicketNumber(createdAt),
       orderId: order.id,
       tableId: order.tableId,
+      tableNumber: table?.number ?? null,
       tableSessionId: order.tableSessionId,
       status: KITCHEN_TICKET_STATUS.PENDING,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      createdAt,
+      updatedAt: createdAt,
       printed: false,
       printAttempts: 0,
       items: order.items.map((item) => {
@@ -2261,7 +2323,7 @@ export const db = {
     order.kitchenTicketId = ticket.id
     order.status = ORDER_STATUS.SENT_TO_KITCHEN
 
-    return { order: clone(order), ticket: clone(ticket) }
+    return { order: clone(order), ticket: clone(enrichKitchenTicket(ticket)) }
   },
 
   updateKitchenTicketStatus(ticketId, newStatus) {
@@ -2275,18 +2337,19 @@ export const db = {
       order.status = KITCHEN_STATUS_TO_ORDER_STATUS[newStatus] ?? order.status
     }
 
-    return { ticket: clone(ticket), order: clone(order) }
+    return { ticket: clone(enrichKitchenTicket(ticket)), order: clone(order) }
   },
 
   autoProgressKitchenTickets(now = Date.now()) {
     const nowMs = now instanceof Date ? now.getTime() : Number(now) || Date.now()
-    const preparingAt = Number(process.env.KITCHEN_AUTO_PREPARING_MIN || 5)
-    const readyAt = Number(process.env.KITCHEN_AUTO_READY_MIN || 12)
-    const deliveredAt = Number(process.env.KITCHEN_AUTO_DELIVERED_MIN || 20)
+    const preparingAt = Number(process.env.KITCHEN_AUTO_PREPARING_MIN || 2)
+    const readyAt = Number(process.env.KITCHEN_AUTO_READY_MIN || 10)
+    const deliveredAtRaw = String(process.env.KITCHEN_AUTO_DELIVERED_MIN || '').trim()
+    const deliveredAt = deliveredAtRaw ? Number(deliveredAtRaw) : null
 
-    const preparingThreshold = Number.isFinite(preparingAt) && preparingAt >= 0 ? preparingAt : 5
-    const readyThreshold = Number.isFinite(readyAt) && readyAt >= preparingThreshold ? readyAt : 12
-    const deliveredThreshold = Number.isFinite(deliveredAt) && deliveredAt >= readyThreshold ? deliveredAt : 20
+    const preparingThreshold = Number.isFinite(preparingAt) && preparingAt >= 0 ? preparingAt : 2
+    const readyThreshold = Number.isFinite(readyAt) && readyAt >= preparingThreshold ? readyAt : 10
+    const deliveredThreshold = Number.isFinite(deliveredAt) && deliveredAt >= readyThreshold ? deliveredAt : null
 
     const statusRank = {
       [KITCHEN_TICKET_STATUS.PENDING]: 0,
@@ -2304,7 +2367,7 @@ export const db = {
       const ageMinutes = (nowMs - createdAtMs) / 60000
 
       let targetStatus = KITCHEN_TICKET_STATUS.PENDING
-      if (ageMinutes >= deliveredThreshold) {
+      if (deliveredThreshold != null && ageMinutes >= deliveredThreshold) {
         targetStatus = KITCHEN_TICKET_STATUS.DELIVERED
       } else if (ageMinutes >= readyThreshold) {
         targetStatus = KITCHEN_TICKET_STATUS.READY

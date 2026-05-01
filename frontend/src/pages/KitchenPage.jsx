@@ -8,12 +8,12 @@ import { getSocket } from '../lib/socket'
 import { kitchenStatusLabel } from '../lib/statusLabels'
 import { useAuthStore } from '../store/authStore'
 
-const COLUMNS = ['PENDING', 'PREPARING', 'READY', 'DELIVERED']
+const COLUMNS = ['PENDING', 'PREPARING', 'READY']
 
 const NEXT_STATUS = {
   PENDING: 'PREPARING',
   PREPARING: 'READY',
-  READY: 'DELIVERED',
+  READY: null,
   DELIVERED: null,
 }
 
@@ -22,6 +22,18 @@ function statusClass(status) {
   if (status === 'PREPARING') return 'status-pill status-progress'
   if (status === 'READY') return 'status-pill status-ready'
   return 'status-pill status-closed'
+}
+
+function ticketLabel(ticket) {
+  const number = Number(ticket?.displayNumber || ticket?.ticketNumber || 0)
+  if (number > 0) return `Comanda ${number}`
+  return `Comanda ${String(ticket?.id || '').slice(0, 6)}`
+}
+
+function tableLabel(ticket) {
+  if (ticket?.tableNumber != null && ticket.tableNumber !== '') return String(ticket.tableNumber)
+  if (ticket?.tableLabel) return String(ticket.tableLabel)
+  return String(ticket?.tableId || '').replace(/^t/i, '') || '-'
 }
 
 export default function KitchenPage() {
@@ -74,7 +86,7 @@ export default function KitchenPage() {
         <div className="section-head">
           <div>
             <h2 className="section-title">Cocina Kanban</h2>
-            <p className="section-subtitle">Estados: pendiente, preparando, listo y entregado. Avance automatico: 5 / 12 / 20 min.</p>
+            <p className="section-subtitle">Estados: pendiente, preparando, listo y entregado. Avance automatico: 2 / 10 min; entrega la confirma el mesero.</p>
           </div>
           <span className="badge">Sincronizacion en tiempo real</span>
         </div>
@@ -90,8 +102,8 @@ export default function KitchenPage() {
                 {group.items.length === 0 && <p className="small muted">Sin tickets</p>}
                 {group.items.map((ticket) => (
                   <article className="card-mini" key={ticket.id}>
-                    <p style={{ fontWeight: 700 }}>Ticket {ticket.id.slice(0, 6)}</p>
-                    <p className="small">Mesa {ticket.tableId.replace('t', '')}</p>
+                    <p style={{ fontWeight: 700 }}>{ticketLabel(ticket)}</p>
+                    <p className="small">Mesa {tableLabel(ticket)}</p>
                     <p className="small muted">Impreso: {ticket.printed ? 'Si' : 'No'} | Intentos: {ticket.printAttempts}</p>
                     <div className="column-list" style={{ marginTop: 6 }}>
                       {ticket.items.map((item, index) => (
@@ -119,7 +131,7 @@ export default function KitchenPage() {
                       <button
                         className="btn btn-soft"
                         onClick={() => {
-                          downloadKitchenTicketPdf(ticket, { tableNumber: ticket.tableId.replace(/^t/i, '') }).catch(() => {
+                          downloadKitchenTicketPdf(ticket, { tableNumber: tableLabel(ticket) }).catch(() => {
                             toast.error('No se pudo generar el PDF de la comanda')
                           })
                         }}

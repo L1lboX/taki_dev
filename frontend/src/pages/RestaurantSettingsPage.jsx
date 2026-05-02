@@ -279,9 +279,10 @@ export default function RestaurantSettingsPage() {
                     <label className="form-label">Nombre de impresora</label>
                     <input
                       onChange={(event) => setPrinterField('printerName', event.target.value)}
-                      placeholder="Ej: Cocina principal"
+                      placeholder="Ej: EPSON TM-T20III Receipt"
                       value={form.printers.printerName}
                     />
+                    <p className="small muted">En USB usa el nombre exacto de Windows o dejalo vacio para la predeterminada.</p>
                   </div>
 
                   <div className="restaurant-settings-field">
